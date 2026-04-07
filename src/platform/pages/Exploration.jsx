@@ -1,39 +1,46 @@
 import { useState } from "react";
 import DetailPanel from "../components/DetailPanel";
 import SaveBtn from "../components/SaveBtn";
-import { ALL_DOMAINES, FORMATIONS_DATA } from "../data/formationsData";
-import { METIERS_DATA } from "../data/metiersData";
+import { ALL_DOMAINES, getFormationById, getFormationsByDomaine } from "../data/formationsData";
+import { getMetierById } from "../data/metiersData";
+import { formationToMetiers } from "../data/relationsData";
 import { T, grad, gradSoft } from "../constants/theme";
 
+const makeDomainId = (domaine) => `DOM.${domaine.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}`;
+
 export default function Exploration({ answers, savedItems, onSave, onRemove, onNav }) {
-  const suggested = (answers?.domaines || []).filter((d) => d !== "Pas encore d'idee" && FORMATIONS_DATA[d]).slice(0, 3);
+  const suggested = (answers?.domaines || []).filter((d) => d !== "Pas encore d'idee" && getFormationsByDomaine(d).length).slice(0, 3);
   if (!suggested.length) suggested.push(...ALL_DOMAINES.slice(0, 3));
 
   const [selDomaine, setSelDomaine] = useState(null);
-  const [selFormation, setSelFormation] = useState(null);
-  const [selMetier, setSelMetier] = useState(null);
+  const [selFormationId, setSelFormationId] = useState(null);
+  const [selMetierId, setSelMetierId] = useState(null);
   const [chatOpen, setChatOpen] = useState(true);
   const [chatMsg, setChatMsg] = useState("Bonjour ! Parcours les domaines, puis sauvegarde formations et métiers en favoris — je t'accompagne à chaque étape.");
   const [chatInput, setChatInput] = useState("");
   const [detailItem, setDetailItem] = useState(null);
 
-  const clickDomaine = (d) => {
-    setSelDomaine(d);
-    setSelFormation(null);
-    setSelMetier(null);
-    setChatMsg(`Tu consultes **${d}**. Je peux t'aider à choisir des formations et des métiers à **sauvegarder en favoris**. Qu'est-ce qui t'intéresse ?`);
+  const selectedFormation = selFormationId ? getFormationById(selFormationId) : null;
+  const selectedMetier = selMetierId ? getMetierById(selMetierId) : null;
+  const formationsByDomain = selDomaine ? getFormationsByDomaine(selDomaine) : [];
+  const metiersForFormation = selectedFormation ? (formationToMetiers[selectedFormation.id] || []).map(getMetierById).filter(Boolean) : [];
+
+  const clickDomaine = (domaine) => {
+    setSelDomaine(domaine);
+    setSelFormationId(null);
+    setSelMetierId(null);
+    setChatMsg(`Tu consultes **${domaine}**. Je peux t'aider à choisir des formations et des métiers à **sauvegarder en favoris**. Qu'est-ce qui t'intéresse ?`);
   };
 
-  const clickFormation = (f) => {
-    setSelFormation(f);
-    setSelMetier(null);
-    const info = FORMATIONS_DATA[selDomaine]?.find((x) => x.l === f);
-    setChatMsg(`**${f}** — ${info?.d}, niveau ${info?.n}. Tu veux que je t'aide à comparer avec d'autres filières ou à décider si tu la **sauvegardes** ?`);
+  const clickFormation = (formation) => {
+    setSelFormationId(formation.id);
+    setSelMetierId(null);
+    setChatMsg(`**${formation.label}** — durée ${formation.duree}, niveau de sélectivité ${formation.selectivite}. Tu veux que je t'aide à comparer avec d'autres filières ou à décider si tu la **sauvegardes** ?`);
   };
 
-  const clickMetier = (m) => {
-    setSelMetier(m);
-    setChatMsg(`**${m}** — perspectives solides (salaire indicatif début de carrière : 28 000 à 38 000 €). Tu veux en savoir plus avant de le **sauvegarder** ?`);
+  const clickMetier = (metier) => {
+    setSelMetierId(metier.id);
+    setChatMsg(`**${metier.label}** — ${metier.salaireDebutant}. Tu veux en savoir plus avant de le **sauvegarder** ?`);
   };
 
   const extraDomaines = ALL_DOMAINES.filter((d) => !suggested.includes(d));
@@ -66,29 +73,36 @@ export default function Exploration({ answers, savedItems, onSave, onRemove, onN
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
               <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: T.muted, letterSpacing: "0.1em", textTransform: "uppercase" }}>Domaines</p>
               {selDomaine && (
-                <button onClick={() => { setSelDomaine(null); setSelFormation(null); setSelMetier(null); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: T.muted, padding: 0 }}>
+                <button
+                  onClick={() => {
+                    setSelDomaine(null);
+                    setSelFormationId(null);
+                    setSelMetierId(null);
+                  }}
+                  style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: T.muted, padding: 0 }}
+                >
                   ← Tout voir
                 </button>
               )}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-              {allDomaines.map((d) => {
-                const isSugg = suggested.includes(d);
-                const isActive = selDomaine === d;
+              {allDomaines.map((domaine) => {
+                const isSugg = suggested.includes(domaine);
+                const isActive = selDomaine === domaine;
                 return (
-                  <div key={d} onClick={() => clickDomaine(d)} style={{ padding: selDomaine ? "9px 12px" : "13px 16px", borderRadius: 13, cursor: "pointer", background: isActive ? T.navyMid : T.white, border: `1px solid ${isActive ? T.navyMid : T.border}`, transition: "all 0.2s" }}>
+                  <div key={domaine} onClick={() => clickDomaine(domaine)} style={{ padding: selDomaine ? "9px 12px" : "13px 16px", borderRadius: 13, cursor: "pointer", background: isActive ? T.navyMid : T.white, border: `1px solid ${isActive ? T.navyMid : T.border}`, transition: "all 0.2s" }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
                       <div style={{ minWidth: 0, flex: 1 }}>
-                        <p style={{ margin: "0 0 2px", fontSize: 12, fontWeight: 700, color: isActive ? "white" : T.text, lineHeight: 1.3, whiteSpace: selDomaine ? "nowrap" : "normal", overflow: selDomaine ? "hidden" : "visible", textOverflow: selDomaine ? "ellipsis" : "clip" }}>{d}</p>
+                        <p style={{ margin: "0 0 2px", fontSize: 12, fontWeight: 700, color: isActive ? "white" : T.text, lineHeight: 1.3, whiteSpace: selDomaine ? "nowrap" : "normal", overflow: selDomaine ? "hidden" : "visible", textOverflow: selDomaine ? "ellipsis" : "clip" }}>{domaine}</p>
                         {!selDomaine && (
                           <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 99, background: isSugg ? gradSoft : T.border, color: isSugg ? T.orange : T.mutedLight, fontWeight: 700 }}>
-                            {isSugg ? "Suggéré" : `${(FORMATIONS_DATA[d] || []).length} formations`}
+                            {isSugg ? "Suggéré" : `${getFormationsByDomaine(domaine).length} formations`}
                           </span>
                         )}
                       </div>
                       {!selDomaine && (
                         <div onClick={(e) => e.stopPropagation()}>
-                          <SaveBtn type="domaine" label={d} parent={null} savedItems={savedItems} onSave={onSave} onRemove={onRemove} small />
+                          <SaveBtn type="domaine" refId={makeDomainId(domaine)} label={domaine} parent={null} savedItems={savedItems} onSave={onSave} onRemove={onRemove} small />
                         </div>
                       )}
                     </div>
@@ -108,17 +122,17 @@ export default function Exploration({ answers, savedItems, onSave, onRemove, onN
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{ margin: "0 0 10px", fontSize: 10, fontWeight: 700, color: T.muted, letterSpacing: "0.1em", textTransform: "uppercase" }}>Formations · {selDomaine}</p>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {(FORMATIONS_DATA[selDomaine] || []).map((f) => {
-                  const isActive = selFormation === f.l;
+                {formationsByDomain.map((formation) => {
+                  const isActive = selFormationId === formation.id;
                   return (
-                    <div key={f.l} onClick={() => clickFormation(f.l)} style={{ padding: "14px 17px", borderRadius: 14, cursor: "pointer", background: isActive ? T.navyMid : T.white, border: `1px solid ${isActive ? T.navyMid : T.border}`, transition: "all 0.2s" }}>
-                      <p style={{ margin: "0 0 3px", fontSize: 13, fontWeight: 700, color: isActive ? "white" : T.text }}>{f.l}</p>
+                    <div key={formation.id} onClick={() => clickFormation(formation)} style={{ padding: "14px 17px", borderRadius: 14, cursor: "pointer", background: isActive ? T.navyMid : T.white, border: `1px solid ${isActive ? T.navyMid : T.border}`, transition: "all 0.2s" }}>
+                      <p style={{ margin: "0 0 3px", fontSize: 13, fontWeight: 700, color: isActive ? "white" : T.text }}>{formation.label}</p>
                       <p style={{ margin: "0 0 10px", fontSize: 11, color: isActive ? "rgba(255,255,255,0.5)" : T.muted }}>
-                        {f.d} · {f.n}
+                        {formation.duree} · {formation.selectivite}
                       </p>
                       <div style={{ display: "flex", gap: 7 }} onClick={(e) => e.stopPropagation()}>
-                        <SaveBtn type="formation" label={f.l} parent={selDomaine} savedItems={savedItems} onSave={onSave} onRemove={onRemove} small />
-                        <DetailBtn item={{ type: "formation", label: f.l, domaine: selDomaine }} />
+                        <SaveBtn type="formation" refId={formation.id} label={formation.label} parent={formation.domaine} parentRefId={makeDomainId(formation.domaine)} savedItems={savedItems} onSave={onSave} onRemove={onRemove} small />
+                        <DetailBtn item={{ type: "formation", refId: formation.id, label: formation.label, domaine: formation.domaine }} />
                       </div>
                     </div>
                   );
@@ -127,18 +141,18 @@ export default function Exploration({ answers, savedItems, onSave, onRemove, onN
             </div>
           )}
 
-          {selFormation && (
+          {selectedFormation && (
             <div style={{ width: 230, flexShrink: 0 }}>
               <p style={{ margin: "0 0 10px", fontSize: 10, fontWeight: 700, color: T.muted, letterSpacing: "0.1em", textTransform: "uppercase" }}>Métiers accessibles</p>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {(METIERS_DATA[selFormation] || []).map((m) => {
-                  const isActive = selMetier === m;
+                {metiersForFormation.map((metier) => {
+                  const isActive = selMetierId === metier.id;
                   return (
-                    <div key={m} onClick={() => clickMetier(m)} style={{ padding: "13px 15px", borderRadius: 14, cursor: "pointer", background: isActive ? gradSoft : T.white, border: `1.5px solid ${isActive ? T.orange : T.border}`, transition: "all 0.2s" }}>
-                      <p style={{ margin: "0 0 9px", fontSize: 12, fontWeight: 700, color: T.text }}>{m}</p>
+                    <div key={metier.id} onClick={() => clickMetier(metier)} style={{ padding: "13px 15px", borderRadius: 14, cursor: "pointer", background: isActive ? gradSoft : T.white, border: `1.5px solid ${isActive ? T.orange : T.border}`, transition: "all 0.2s" }}>
+                      <p style={{ margin: "0 0 9px", fontSize: 12, fontWeight: 700, color: T.text }}>{metier.label}</p>
                       <div style={{ display: "flex", gap: 7 }} onClick={(e) => e.stopPropagation()}>
-                        <SaveBtn type="metier" label={m} parent={selFormation} savedItems={savedItems} onSave={onSave} onRemove={onRemove} small />
-                        <DetailBtn item={{ type: "metier", label: m, formation: selFormation }} />
+                        <SaveBtn type="metier" refId={metier.id} label={metier.label} parent={selectedFormation.label} parentRefId={selectedFormation.id} savedItems={savedItems} onSave={onSave} onRemove={onRemove} small />
+                        <DetailBtn item={{ type: "metier", refId: metier.id, label: metier.label, formation: selectedFormation.label, formationId: selectedFormation.id }} />
                       </div>
                     </div>
                   );
@@ -156,7 +170,7 @@ export default function Exploration({ answers, savedItems, onSave, onRemove, onN
               <div style={{ width: 28, height: 28, borderRadius: 9, background: grad, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "white" }}>◈</div>
               <div>
                 <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: T.text }}>Agent MIRAI</p>
-                <p style={{ margin: 0, fontSize: 10, color: T.muted }}>{selMetier ? "Metiers" : selFormation ? "Formations" : "Domaines"}</p>
+                <p style={{ margin: 0, fontSize: 10, color: T.muted }}>{selectedMetier ? "Métier" : selectedFormation ? "Formation" : "Domaines"}</p>
               </div>
             </div>
             <button onClick={() => setChatOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, color: T.muted, padding: 4 }}>

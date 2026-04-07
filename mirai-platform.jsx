@@ -24,13 +24,13 @@ export default function MiraiApp() {
   const [savedItems, setSavedItems] = useState([]);
   const [config, setConfig] = useState(DEFAULT_CONFIG);
 
-  const handleSave = (type, label, parent) => {
-    if (savedItems.some((i) => i.type === type && i.label === label)) return;
-    setSavedItems((s) => [...s, { id: Date.now(), type, label, parent }]);
+  const handleSave = (type, label, parent, refId = label, parentRefId = null) => {
+    if (savedItems.some((i) => i.type === type && (refId ? i.refId === refId : i.label === label))) return;
+    setSavedItems((s) => [...s, { id: Date.now(), type, refId, label, parent, parentRefId }]);
   };
 
-  const handleRemove = (type, label) => {
-    setSavedItems((s) => s.filter((i) => !(i.type === type && i.label === label)));
+  const handleRemove = (type, identifier) => {
+    setSavedItems((s) => s.filter((i) => !(i.type === type && (i.refId === identifier || i.label === identifier))));
   };
 
   const handleLogout = () => {

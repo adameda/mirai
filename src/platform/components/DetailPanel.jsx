@@ -1,42 +1,52 @@
 import Badge from "./Badge";
 import { T, grad, gradSoft } from "../constants/theme";
-import { FORMATION_DESCS, FORMATIONS_DATA } from "../data/formationsData";
-import { METIERS_DATA } from "../data/metiersData";
+import { FORMATIONS_DATA, getFormationById } from "../data/formationsData";
+import { METIERS_DATA, getMetierById } from "../data/metiersData";
+import { formationToMetiers, metierToFormations } from "../data/relationsData";
 
 export default function DetailPanel({ item, onClose, onSave, onRemove, savedItems, onAskMirai }) {
   if (!item) return null;
-  const saved = savedItems.some((i) => i.type === item.type && i.label === item.label);
+  const saved = savedItems.some((i) => i.type === item.type && (item.refId ? i.refId === item.refId : i.label === item.label));
 
   let metaRow;
   let bodyContent;
+  let parentForSave = item.parent || null;
+  let parentRefId = item.parentRefId || null;
+
+  const findFormationByLabel = (label) => FORMATIONS_DATA.find((formation) => formation.label === label) || null;
+  const findMetierByLabel = (label) => METIERS_DATA.find((metier) => metier.label === label) || null;
 
   if (item.type === "formation") {
-    const formData = FORMATIONS_DATA[item.domaine]?.find((f) => f.l === item.label);
-    const metiers = METIERS_DATA[item.label] || [];
-    const desc =
-      FORMATION_DESCS[item.label] ||
-      `Formation ${item.label} dans le domaine ${item.domaine}. Parcours alliant enseignements théoriques et mises en pratique professionnelles.`;
-    const niveauColor = (formData?.n || "").includes("Tres") ? T.coral : (formData?.n || "").includes("Selectif") ? T.orange : T.success;
-    const niveauBg = (formData?.n || "").includes("Tres") ? "#F4736A14" : (formData?.n || "").includes("Selectif") ? "#F9A23B14" : "#2EC99A14";
+    const formation = item.refId ? getFormationById(item.refId) : findFormationByLabel(item.label);
+    const metiers = formation ? (formationToMetiers[formation.id] || []).map(getMetierById).filter(Boolean) : [];
+    const formationLabel = formation?.label || item.label;
+    const description = formation?.descriptionCourte || `Formation ${formationLabel} dans le domaine ${formation?.domaine || item.domaine || ""}.`;
 
     metaRow = (
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
-        {formData && <Badge label={formData.d} color={T.muted} bg={T.bg} />}
-        {formData && <Badge label={formData.n} color={niveauColor} bg={niveauBg} />}
-        {item.domaine && <Badge label={item.domaine} color={T.muted} bg={T.border} />}
+        {formation?.typeFormation?.sigle && <Badge label={formation.typeFormation.sigle} color={T.muted} bg={T.bg} />}
+        {formation?.duree && <Badge label={formation.duree} color={T.orange} bg={gradSoft} />}
+        {formation?.selectivite && <Badge label={formation.selectivite} color={T.success} bg="#2EC99A14" />}
+        {(formation?.domaine || item.domaine) && <Badge label={formation?.domaine || item.domaine} color={T.muted} bg={T.border} />}
       </div>
     );
 
     bodyContent = (
       <>
-        <p style={{ margin: "0 0 20px", fontSize: 14, color: T.muted, lineHeight: 1.75 }}>{desc}</p>
+        <p style={{ margin: "0 0 18px", fontSize: 14, color: T.muted, lineHeight: 1.75 }}>{description}</p>
+        {formation?.acces && (
+          <div style={{ padding: "14px 16px", borderRadius: 14, background: T.bg, border: `1px solid ${T.border}`, marginBottom: 16 }}>
+            <p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 700, color: T.text }}>Accès</p>
+            <p style={{ margin: 0, fontSize: 13, color: T.muted, lineHeight: 1.65 }}>{formation.acces}</p>
+          </div>
+        )}
         {metiers.length > 0 && (
           <div style={{ marginBottom: 20 }}>
-            <p style={{ margin: "0 0 10px", fontSize: 12, fontWeight: 700, color: T.text }}>Métiers accessibles</p>
+            <p style={{ margin: "0 0 10px", fontSize: 12, fontWeight: 700, color: T.text }}>Métiers associés</p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
-              {metiers.map((m) => (
-                <span key={m} style={{ padding: "5px 12px", borderRadius: 99, background: gradSoft, border: "1px solid #F9A23B20", fontSize: 12, color: T.coral, fontWeight: 600 }}>
-                  {m}
+              {metiers.map((metier) => (
+                <span key={metier.id} style={{ padding: "5px 12px", borderRadius: 99, background: gradSoft, border: "1px solid #F9A23B20", fontSize: 12, color: T.coral, fontWeight: 600 }}>
+                  {metier.label}
                 </span>
               ))}
             </div>
@@ -44,42 +54,63 @@ export default function DetailPanel({ item, onClose, onSave, onRemove, savedItem
         )}
       </>
     );
+
+    parentForSave = formation?.domaine || item.domaine || null;
+    parentRefId = formation?.domaine ? `DOM.${formation.domaine.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}` : item.parentRefId || null;
   } else {
-    const formations = Object.keys(METIERS_DATA).filter((f) => METIERS_DATA[f].includes(item.label));
+    const metier = item.refId ? getMetierById(item.refId) : findMetierByLabel(item.label);
+    const formations = metier ? (metierToFormations[metier.id] || []).map(getFormationById).filter(Boolean) : [];
+    const metierLabel = metier?.label || item.label;
+
     metaRow = (
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
-        <Badge label="28 000 – 38 000 € / an" color={T.success} bg="#2EC99A14" />
+        {metier?.secteur && <Badge label={metier.secteur} color={T.muted} bg={T.bg} />}
+        {metier?.niveauAccesMin && <Badge label={metier.niveauAccesMin} color={T.success} bg="#2EC99A14" />}
+        {metier?.salaireDebutant && <Badge label={metier.salaireDebutant} color={T.orange} bg={gradSoft} />}
       </div>
     );
 
     bodyContent = (
       <>
-        <p style={{ margin: "0 0 16px", fontSize: 14, color: T.muted, lineHeight: 1.75 }}>
-          {`En tant que ${item.label.toLowerCase()}, tu interviendras sur des projets variés avec un fort impact métier. Poste accessible dès la fin de ta formation, avec une montée en compétences rapide et des responsabilités croissantes.`}
-        </p>
-        {formations.length > 0 && (
+        <p style={{ margin: "0 0 16px", fontSize: 14, color: T.muted, lineHeight: 1.75 }}>{metier?.accroche || `Fiche métier ${metierLabel}.`}</p>
+        {metier?.formatCourt && (
+          <div style={{ padding: "14px 16px", borderRadius: 14, background: T.bg, border: `1px solid ${T.border}`, marginBottom: 16 }}>
+            <p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 700, color: T.text }}>En bref</p>
+            <p style={{ margin: 0, fontSize: 13, color: T.muted, lineHeight: 1.65 }}>{metier.formatCourt}</p>
+          </div>
+        )}
+        {metier?.competences?.length > 0 && (
           <div style={{ marginBottom: 16 }}>
-            <p style={{ margin: "0 0 10px", fontSize: 12, fontWeight: 700, color: T.text }}>Formations associées</p>
+            <p style={{ margin: "0 0 10px", fontSize: 12, fontWeight: 700, color: T.text }}>Compétences clés</p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
-              {formations.map((f) => (
-                <span key={f} style={{ padding: "5px 12px", borderRadius: 99, background: gradSoft, border: "1px solid #F9A23B20", fontSize: 12, color: T.coral, fontWeight: 600 }}>
-                  {f}
+              {metier.competences.map((competence) => (
+                <span key={competence} style={{ padding: "5px 12px", borderRadius: 99, background: gradSoft, border: "1px solid #F9A23B20", fontSize: 12, color: T.coral, fontWeight: 600 }}>
+                  {competence}
                 </span>
               ))}
             </div>
           </div>
         )}
-        <div style={{ padding: "14px 16px", borderRadius: 14, background: T.bg, border: `1px solid ${T.border}`, marginBottom: 4 }}>
-          <p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 700, color: T.text }}>Perspectives d'évolution</p>
-          <p style={{ margin: 0, fontSize: 13, color: T.muted, lineHeight: 1.65 }}>
-            Évolution vers des rôles senior, lead technique ou management possible après 3 à 5 ans d'expérience. Possibilité d'entrepreneuriat ou de reconversion vers des postes de conseil.
-          </p>
-        </div>
+        {formations.length > 0 && (
+          <div style={{ padding: "14px 16px", borderRadius: 14, background: T.bg, border: `1px solid ${T.border}`, marginBottom: 4 }}>
+            <p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 700, color: T.text }}>Formations associées</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginTop: 8 }}>
+              {formations.map((formation) => (
+                <span key={formation.id} style={{ padding: "5px 12px", borderRadius: 99, background: gradSoft, border: "1px solid #F9A23B20", fontSize: 12, color: T.coral, fontWeight: 600 }}>
+                  {formation.label}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </>
     );
+
+    parentForSave = metier?.accesFormationsIds?.length ? getFormationById(metier.accesFormationsIds[0])?.label || item.parent || null : item.parent || null;
+    parentRefId = item.formationId || metier?.accesFormationsIds?.[0] || item.parentRefId || null;
   }
 
-  const parentForSave = item.domaine || item.formation || (item.type === "metier" ? Object.keys(METIERS_DATA).find((f) => METIERS_DATA[f].includes(item.label)) : null);
+  const identifier = item.refId || item.label;
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,31,61,0.5)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }} onClick={onClose}>
@@ -121,9 +152,7 @@ export default function DetailPanel({ item, onClose, onSave, onRemove, savedItem
           ✕
         </button>
         <div style={{ marginBottom: 16 }}>
-          <p style={{ margin: "0 0 6px", fontSize: 11, fontWeight: 700, color: T.muted, letterSpacing: "0.1em", textTransform: "uppercase" }}>
-            {item.type === "formation" ? "Formation" : "Métier"}
-          </p>
+          <p style={{ margin: "0 0 6px", fontSize: 11, fontWeight: 700, color: T.muted, letterSpacing: "0.1em", textTransform: "uppercase" }}>{item.type === "formation" ? "Formation" : "Métier"}</p>
           <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: T.text, letterSpacing: "-0.03em" }}>{item.label}</h2>
         </div>
         {metaRow}
@@ -163,7 +192,7 @@ export default function DetailPanel({ item, onClose, onSave, onRemove, savedItem
             </button>
             <button
               type="button"
-              onClick={() => (saved ? onRemove(item.type, item.label) : onSave(item.type, item.label, parentForSave))}
+              onClick={() => (saved ? onRemove(item.type, identifier) : onSave(item.type, item.label, parentForSave, identifier, parentRefId))}
               style={{
                 flex: 2,
                 padding: "12px",

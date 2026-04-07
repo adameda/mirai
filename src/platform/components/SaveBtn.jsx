@@ -1,13 +1,14 @@
 import { T, gradSoft } from "../constants/theme";
 
-export default function SaveBtn({ type, label, parent, savedItems, onSave, onRemove, small = false }) {
-  const saved = savedItems.some((i) => i.type === type && i.label === label);
+export default function SaveBtn({ type, refId, label, parent, parentRefId = null, savedItems, onSave, onRemove, small = false }) {
+  const identifier = refId || label;
+  const saved = savedItems.some((i) => i.type === type && (refId ? i.refId === refId : i.label === label));
 
   return (
     <button
       onClick={(e) => {
         e.stopPropagation();
-        saved ? onRemove(type, label) : onSave(type, label, parent);
+        saved ? onRemove(type, identifier) : onSave(type, label, parent, identifier, parentRefId);
       }}
       style={{
         display: "flex",

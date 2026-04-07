@@ -29,14 +29,20 @@ export default function Favoris({ savedItems, onRemove, onSave, onNav }) {
               </div>
               {canDetail && (
                 <button
-                  onClick={() => setDetailItem(item.type === "formation" ? { type: "formation", label: item.label, domaine: item.parent } : { type: "metier", label: item.label, formation: item.parent })}
+                  onClick={() =>
+                    setDetailItem(
+                      item.type === "formation"
+                        ? { type: "formation", refId: item.refId, label: item.label, domaine: item.parent, parent: item.parent, parentRefId: item.parentRefId }
+                        : { type: "metier", refId: item.refId, label: item.label, formation: item.parent, formationId: item.parentRefId, parent: item.parent, parentRefId: item.parentRefId },
+                    )
+                  }
                   style={{ flexShrink: 0, padding: "6px 12px", borderRadius: 9, border: `1.5px solid ${T.border}`, background: T.bg, cursor: "pointer", fontSize: 11, fontWeight: 700, color: T.muted, fontFamily: "'DM Sans',sans-serif", transition: "all 0.18s" }}
                 >
                   Voir la fiche
                 </button>
               )}
               <button
-                onClick={() => onRemove(item.type, item.label)}
+                onClick={() => onRemove(item.type, item.refId || item.label)}
                 style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: T.mutedLight, padding: "4px 6px", borderRadius: 8, transition: "color 0.15s" }}
                 onMouseEnter={(e) => (e.target.style.color = T.coral)}
                 onMouseLeave={(e) => (e.target.style.color = T.mutedLight)}
