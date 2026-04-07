@@ -1,7 +1,10 @@
 import Logo from "../components/Logo";
 import { NAV_PROF, T, grad } from "../constants/theme";
+import { useAppState } from "../hooks/useAppState";
 
-export default function SidebarProf({ active, onNav, user, onLogout }) {
+export default function SidebarProf() {
+  const { page, setPage, user, logout } = useAppState();
+
   return (
     <aside style={{ width: 220, flexShrink: 0, background: T.navyMid, display: "flex", flexDirection: "column", padding: "28px 0", height: "100%" }}>
       <div style={{ padding: "0 24px 32px" }}>
@@ -9,11 +12,11 @@ export default function SidebarProf({ active, onNav, user, onLogout }) {
       </div>
       <nav style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, padding: "0 12px" }}>
         {NAV_PROF.map((n) => {
-          const isActive = n.id === active;
+          const isActive = n.id === page;
           return (
             <div
               key={n.id}
-              onClick={() => onNav(n.id)}
+              onClick={() => setPage(n.id)}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -60,7 +63,7 @@ export default function SidebarProf({ active, onNav, user, onLogout }) {
       <div style={{ padding: "0 12px" }}>
         <button
           type="button"
-          onClick={onLogout}
+          onClick={logout}
           style={{
             width: "100%",
             padding: "11px 14px",

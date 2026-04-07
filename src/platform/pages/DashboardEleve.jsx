@@ -4,8 +4,10 @@ import GradText from "../components/GradText";
 import ProgressBar from "../components/ProgressBar";
 import { T, grad } from "../constants/theme";
 import { computeObjectives } from "../utils/computeObjectives";
+import { useAppState } from "../hooks/useAppState";
 
-export default function DashboardEleve({ user, onboarded, savedItems, config, onStartOnboarding, onNav }) {
+export default function DashboardEleve() {
+  const { user, onboarded, savedItems, config, startOnboarding, setPage } = useAppState();
   const { objs, activeIdx } = useMemo(() => computeObjectives(onboarded, savedItems, config), [onboarded, savedItems, config]);
   const allDone = objs.every((obj) => obj.achieved);
 
@@ -36,7 +38,7 @@ export default function DashboardEleve({ user, onboarded, savedItems, config, on
             <h2 style={{ margin: "0 0 8px", fontSize: 20, fontWeight: 800, color: "white", letterSpacing: "-0.02em" }}>Complete ton profil pour debloquer la plateforme</h2>
             <p style={{ margin: 0, fontSize: 13, color: "rgba(255,255,255,0.5)", lineHeight: 1.6 }}>L'exploration, les favoris et le chatbot seront accessibles une fois ton profil renseigné.</p>
           </div>
-          <button onClick={onStartOnboarding} style={{ flexShrink: 0, marginLeft: 24, padding: "13px 28px", borderRadius: 13, border: "none", background: grad, color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 6px 20px rgba(249,162,59,0.4)", whiteSpace: "nowrap" }}>
+          <button onClick={startOnboarding} style={{ flexShrink: 0, marginLeft: 24, padding: "13px 28px", borderRadius: 13, border: "none", background: grad, color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 6px 20px rgba(249,162,59,0.4)", whiteSpace: "nowrap" }}>
             Completer mon profil →
           </button>
         </div>
@@ -110,12 +112,12 @@ export default function DashboardEleve({ user, onboarded, savedItems, config, on
                                 {obj.date ? `Date limite : ${obj.date}` : "Sans date limite"}
                               </span>
                               {!onboarded && obj.id === 1 && (
-                                <button onClick={onStartOnboarding} style={{ padding: "9px 20px", borderRadius: 11, border: "none", background: grad, color: "white", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 14px rgba(249,162,59,0.4)" }}>
+                                <button onClick={startOnboarding} style={{ padding: "9px 20px", borderRadius: 11, border: "none", background: grad, color: "white", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 14px rgba(249,162,59,0.4)" }}>
                                   Compléter mon profil →
                                 </button>
                               )}
                               {onboarded && obj.id !== 1 && !obj.achieved && (
-                                <button onClick={() => onNav("exploration")} style={{ padding: "9px 20px", borderRadius: 11, border: "none", background: grad, color: "white", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 14px rgba(249,162,59,0.4)" }}>
+                                <button onClick={() => setPage("exploration")} style={{ padding: "9px 20px", borderRadius: 11, border: "none", background: grad, color: "white", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 14px rgba(249,162,59,0.4)" }}>
                                   Sauvegarder des favoris →
                                 </button>
                               )}
@@ -146,7 +148,7 @@ export default function DashboardEleve({ user, onboarded, savedItems, config, on
           ].map((r) => (
             <div
               key={r.label}
-              onClick={() => onNav("favoris")}
+              onClick={() => setPage("favoris")}
               style={{ flex: 1, background: T.white, borderRadius: 18, padding: "20px 22px", border: `1px solid ${T.border}`, cursor: "pointer", boxShadow: "0 2px 8px rgba(15,31,61,0.04)", transition: "box-shadow 0.2s, transform 0.2s" }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.boxShadow = "0 8px 24px rgba(15,31,61,0.1)";

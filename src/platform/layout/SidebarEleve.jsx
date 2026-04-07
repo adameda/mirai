@@ -1,7 +1,10 @@
 import Logo from "../components/Logo";
 import { NAV_ELEVE, T, grad } from "../constants/theme";
+import { useAppState } from "../hooks/useAppState";
 
-export default function SidebarEleve({ active, onNav, user, locked, onLogout }) {
+export default function SidebarEleve() {
+  const { page, setPage, user, locked, logout } = useAppState();
+
   return (
     <aside style={{ width: 220, flexShrink: 0, background: T.navyMid, display: "flex", flexDirection: "column", padding: "28px 0", height: "100%" }}>
       <div style={{ padding: "0 24px 32px" }}>
@@ -9,12 +12,12 @@ export default function SidebarEleve({ active, onNav, user, locked, onLogout }) 
       </div>
       <nav style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, padding: "0 12px" }}>
         {NAV_ELEVE.map((n) => {
-          const isActive = n.id === active;
+          const isActive = n.id === page;
           const isLocked = locked && n.id !== "dashboard";
           return (
             <div
               key={n.id}
-              onClick={() => !isLocked && onNav(n.id)}
+              onClick={() => !isLocked && setPage(n.id)}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -66,7 +69,7 @@ export default function SidebarEleve({ active, onNav, user, locked, onLogout }) 
       <div style={{ padding: "0 12px" }}>
         <button
           type="button"
-          onClick={onLogout}
+          onClick={logout}
           style={{
             width: "100%",
             padding: "11px 14px",

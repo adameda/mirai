@@ -3,8 +3,10 @@ import GradText from "../components/GradText";
 import ProgressBar from "../components/ProgressBar";
 import { MOCK_STUDENTS } from "../data/mockStudents";
 import { T } from "../constants/theme";
+import { useAppState } from "../hooks/useAppState";
 
-export default function ProfDashboard({ user, config, onNav }) {
+export default function ProfDashboard() {
+  const { user, config, setPage } = useAppState();
   const n = MOCK_STUDENTS.length;
   const nbProfilOk = MOCK_STUDENTS.filter((s) => s.onboarded).length;
   const nbDomainesOk = MOCK_STUDENTS.filter((s) => s.onboarded && s.domaines >= config.obj2.target).length;
@@ -62,7 +64,7 @@ export default function ProfDashboard({ user, config, onNav }) {
             <p style={{ margin: "0 0 4px", fontSize: 11, fontWeight: 700, color: T.muted, letterSpacing: "0.1em", textTransform: "uppercase" }}>Parcours élève</p>
             <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: T.text }}>Mêmes objectifs que sur leur tableau de bord</h3>
           </div>
-          <button type="button" onClick={() => onNav("prof-jalons")} style={{ padding: "8px 14px", borderRadius: 11, border: `1.5px solid ${T.border}`, background: T.bg, fontSize: 12, fontWeight: 700, color: T.orange, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
+          <button type="button" onClick={() => setPage("prof-jalons")} style={{ padding: "8px 14px", borderRadius: 11, border: `1.5px solid ${T.border}`, background: T.bg, fontSize: 12, fontWeight: 700, color: T.orange, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
             Modifier les dates et seuils
           </button>
         </div>

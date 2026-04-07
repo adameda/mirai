@@ -5,10 +5,12 @@ import { ALL_DOMAINES, getFormationById, getFormationsByDomaine } from "../data/
 import { getMetierById } from "../data/metiersData";
 import { formationToMetiers } from "../data/relationsData";
 import { T, grad, gradSoft } from "../constants/theme";
+import { useAppState } from "../hooks/useAppState";
 
 const makeDomainId = (domaine) => `DOM.${domaine.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}`;
 
-export default function Exploration({ answers, savedItems, onSave, onRemove, onNav }) {
+export default function Exploration() {
+  const { answers, savedItems, saveItem, removeItem, setPage } = useAppState();
   const suggested = (answers?.domaines || []).filter((d) => d !== "Pas encore d'idee" && getFormationsByDomaine(d).length).slice(0, 3);
   if (!suggested.length) suggested.push(...ALL_DOMAINES.slice(0, 3));
 
@@ -60,7 +62,7 @@ export default function Exploration({ answers, savedItems, onSave, onRemove, onN
 
   return (
     <div style={{ flex: 1, display: "flex", overflow: "hidden", fontFamily: "'DM Sans',sans-serif" }}>
-      {detailItem && <DetailPanel item={detailItem} onClose={() => setDetailItem(null)} onSave={onSave} onRemove={onRemove} savedItems={savedItems} onAskMirai={onNav ? () => onNav("chatbot") : undefined} />}
+      {detailItem && <DetailPanel item={detailItem} onClose={() => setDetailItem(null)} onSave={saveItem} onRemove={removeItem} savedItems={savedItems} onAskMirai={() => setPage("chatbot")} />}
 
       <div style={{ flex: 1, overflowY: "auto", padding: "32px 32px 32px 48px", background: T.bg }}>
         <div style={{ marginBottom: 22 }}>
@@ -102,7 +104,7 @@ export default function Exploration({ answers, savedItems, onSave, onRemove, onN
                       </div>
                       {!selDomaine && (
                         <div onClick={(e) => e.stopPropagation()}>
-                          <SaveBtn type="domaine" refId={makeDomainId(domaine)} label={domaine} parent={null} savedItems={savedItems} onSave={onSave} onRemove={onRemove} small />
+                          <SaveBtn type="domaine" refId={makeDomainId(domaine)} label={domaine} parent={null} savedItems={savedItems} onSave={saveItem} onRemove={removeItem} small />
                         </div>
                       )}
                     </div>
@@ -131,7 +133,7 @@ export default function Exploration({ answers, savedItems, onSave, onRemove, onN
                         {formation.duree} · {formation.selectivite}
                       </p>
                       <div style={{ display: "flex", gap: 7 }} onClick={(e) => e.stopPropagation()}>
-                        <SaveBtn type="formation" refId={formation.id} label={formation.label} parent={formation.domaine} parentRefId={makeDomainId(formation.domaine)} savedItems={savedItems} onSave={onSave} onRemove={onRemove} small />
+                        <SaveBtn type="formation" refId={formation.id} label={formation.label} parent={formation.domaine} parentRefId={makeDomainId(formation.domaine)} savedItems={savedItems} onSave={saveItem} onRemove={removeItem} small />
                         <DetailBtn item={{ type: "formation", refId: formation.id, label: formation.label, domaine: formation.domaine }} />
                       </div>
                     </div>
@@ -151,7 +153,7 @@ export default function Exploration({ answers, savedItems, onSave, onRemove, onN
                     <div key={metier.id} onClick={() => clickMetier(metier)} style={{ padding: "13px 15px", borderRadius: 14, cursor: "pointer", background: isActive ? gradSoft : T.white, border: `1.5px solid ${isActive ? T.orange : T.border}`, transition: "all 0.2s" }}>
                       <p style={{ margin: "0 0 9px", fontSize: 12, fontWeight: 700, color: T.text }}>{metier.label}</p>
                       <div style={{ display: "flex", gap: 7 }} onClick={(e) => e.stopPropagation()}>
-                        <SaveBtn type="metier" refId={metier.id} label={metier.label} parent={selectedFormation.label} parentRefId={selectedFormation.id} savedItems={savedItems} onSave={onSave} onRemove={onRemove} small />
+                        <SaveBtn type="metier" refId={metier.id} label={metier.label} parent={selectedFormation.label} parentRefId={selectedFormation.id} savedItems={savedItems} onSave={saveItem} onRemove={removeItem} small />
                         <DetailBtn item={{ type: "metier", refId: metier.id, label: metier.label, formation: selectedFormation.label, formationId: selectedFormation.id }} />
                       </div>
                     </div>

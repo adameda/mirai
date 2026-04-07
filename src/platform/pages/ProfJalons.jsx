@@ -1,9 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Input from "../components/Input";
 import { T, grad } from "../constants/theme";
+import { useAppState } from "../hooks/useAppState";
 
-export default function ProfJalons({ config, onUpdateConfig }) {
+export default function ProfJalons() {
+  const { config, setConfig } = useAppState();
   const [local, setLocal] = useState({ ...config });
+
+  useEffect(() => {
+    setLocal({ ...config });
+  }, [config]);
+
   const upd = (key, field, val) => setLocal((c) => ({ ...c, [key]: { ...c[key], [field]: val } }));
 
   const Row = ({ num, title, children, withBorder }) => (
@@ -67,7 +74,7 @@ export default function ProfJalons({ config, onUpdateConfig }) {
         </Row>
       </div>
 
-      <button type="button" onClick={() => onUpdateConfig(local)} style={{ marginTop: 20, padding: "14px 28px", borderRadius: 14, border: "none", background: grad, color: "white", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 6px 20px rgba(249,162,59,0.3)" }}>
+      <button type="button" onClick={() => setConfig(local)} style={{ marginTop: 20, padding: "14px 28px", borderRadius: 14, border: "none", background: grad, color: "white", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 6px 20px rgba(249,162,59,0.3)" }}>
         Enregistrer
       </button>
     </div>

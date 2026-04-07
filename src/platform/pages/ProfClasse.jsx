@@ -1,8 +1,10 @@
 import Badge from "../components/Badge";
 import { MOCK_STUDENTS } from "../data/mockStudents";
 import { T, grad } from "../constants/theme";
+import { useAppState } from "../hooks/useAppState";
 
-export default function ProfClasse({ config }) {
+export default function ProfClasse() {
+  useAppState();
   return (
     <div style={{ flex: 1, overflowY: "auto", padding: "40px 48px", background: T.bg, fontFamily: "'DM Sans',sans-serif" }}>
       <div style={{ marginBottom: 24 }}>
