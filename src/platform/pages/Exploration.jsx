@@ -1,9 +1,7 @@
 import { useState } from "react";
 import DetailPanel from "../components/DetailPanel";
 import SaveBtn from "../components/SaveBtn";
-import { ALL_DOMAINES, getFormationById, getFormationsByDomaine } from "../data/formationsData";
-import { getMetierById } from "../data/metiersData";
-import { formationToMetiers } from "../data/relationsData";
+import { getAllDomaines, getFormationsByDomaine, getFormationById, getMetierById, getMetiersForFormation, getSuggestedDomaines } from "../services/explorationService";
 import { T, grad, gradSoft } from "../constants/theme";
 import { useAppState } from "../hooks/useAppState";
 
@@ -11,8 +9,7 @@ const makeDomainId = (domaine) => `DOM.${domaine.toUpperCase().replace(/[^A-Z0-9
 
 export default function Exploration() {
   const { answers, savedItems, saveItem, removeItem, setPage } = useAppState();
-  const suggested = (answers?.domaines || []).filter((d) => d !== "Pas encore d'idee" && getFormationsByDomaine(d).length).slice(0, 3);
-  if (!suggested.length) suggested.push(...ALL_DOMAINES.slice(0, 3));
+  const suggested = getSuggestedDomaines(answers?.domaines);
 
   const [selDomaine, setSelDomaine] = useState(null);
   const [selFormationId, setSelFormationId] = useState(null);
@@ -25,7 +22,7 @@ export default function Exploration() {
   const selectedFormation = selFormationId ? getFormationById(selFormationId) : null;
   const selectedMetier = selMetierId ? getMetierById(selMetierId) : null;
   const formationsByDomain = selDomaine ? getFormationsByDomaine(selDomaine) : [];
-  const metiersForFormation = selectedFormation ? (formationToMetiers[selectedFormation.id] || []).map(getMetierById).filter(Boolean) : [];
+  const metiersForFormation = selectedFormation ? getMetiersForFormation(selectedFormation.id) : [];
 
   const clickDomaine = (domaine) => {
     setSelDomaine(domaine);
@@ -45,7 +42,8 @@ export default function Exploration() {
     setChatMsg(`**${metier.label}** — ${metier.salaireDebutant}. Tu veux en savoir plus avant de le **sauvegarder** ?`);
   };
 
-  const extraDomaines = ALL_DOMAINES.filter((d) => !suggested.includes(d));
+  const allDomainesList = getAllDomaines();
+  const extraDomaines = allDomainesList.filter((d) => !suggested.includes(d));
   const allDomaines = [...suggested, ...extraDomaines];
 
   const DetailBtn = ({ item }) => (

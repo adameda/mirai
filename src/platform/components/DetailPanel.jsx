@@ -1,8 +1,6 @@
 import Badge from "./Badge";
 import { T, grad, gradSoft } from "../constants/theme";
-import { FORMATIONS_DATA, getFormationById } from "../data/formationsData";
-import { METIERS_DATA, getMetierById } from "../data/metiersData";
-import { formationToMetiers, metierToFormations } from "../data/relationsData";
+import { getFormationById, getFormationByLabel, getMetierById, getMetierByLabel, getMetiersForFormation, getFormationsForMetier } from "../services/explorationService";
 
 export default function DetailPanel({ item, onClose, onSave, onRemove, savedItems, onAskMirai }) {
   if (!item) return null;
@@ -13,12 +11,9 @@ export default function DetailPanel({ item, onClose, onSave, onRemove, savedItem
   let parentForSave = item.parent || null;
   let parentRefId = item.parentRefId || null;
 
-  const findFormationByLabel = (label) => FORMATIONS_DATA.find((formation) => formation.label === label) || null;
-  const findMetierByLabel = (label) => METIERS_DATA.find((metier) => metier.label === label) || null;
-
   if (item.type === "formation") {
-    const formation = item.refId ? getFormationById(item.refId) : findFormationByLabel(item.label);
-    const metiers = formation ? (formationToMetiers[formation.id] || []).map(getMetierById).filter(Boolean) : [];
+    const formation = item.refId ? getFormationById(item.refId) : getFormationByLabel(item.label);
+    const metiers = formation ? getMetiersForFormation(formation.id) : [];
     const formationLabel = formation?.label || item.label;
     const description = formation?.descriptionCourte || `Formation ${formationLabel} dans le domaine ${formation?.domaine || item.domaine || ""}.`;
 
@@ -58,8 +53,8 @@ export default function DetailPanel({ item, onClose, onSave, onRemove, savedItem
     parentForSave = formation?.domaine || item.domaine || null;
     parentRefId = formation?.domaine ? `DOM.${formation.domaine.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}` : item.parentRefId || null;
   } else {
-    const metier = item.refId ? getMetierById(item.refId) : findMetierByLabel(item.label);
-    const formations = metier ? (metierToFormations[metier.id] || []).map(getFormationById).filter(Boolean) : [];
+    const metier = item.refId ? getMetierById(item.refId) : getMetierByLabel(item.label);
+    const formations = metier ? getFormationsForMetier(metier.id) : [];
     const metierLabel = metier?.label || item.label;
 
     metaRow = (

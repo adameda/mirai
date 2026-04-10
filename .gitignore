@@ -1,3 +1,6 @@
 node_modules
 dist
 .DS_Store
+fiche_metier.txt
+fiche_formation.txt
+API_CONTRACT.md

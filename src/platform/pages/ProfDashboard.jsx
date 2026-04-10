@@ -1,17 +1,18 @@
 import Badge from "../components/Badge";
 import GradText from "../components/GradText";
 import ProgressBar from "../components/ProgressBar";
-import { MOCK_STUDENTS } from "../data/mockStudents";
+import { getClasseStudents } from "../services/classeService";
 import { T } from "../constants/theme";
 import { useAppState } from "../hooks/useAppState";
 
 export default function ProfDashboard() {
   const { user, config, setPage } = useAppState();
-  const n = MOCK_STUDENTS.length;
-  const nbProfilOk = MOCK_STUDENTS.filter((s) => s.onboarded).length;
-  const nbDomainesOk = MOCK_STUDENTS.filter((s) => s.onboarded && s.domaines >= config.obj2.target).length;
-  const nbFormOk = MOCK_STUDENTS.filter((s) => s.onboarded && s.formations >= config.obj3.target).length;
-  const nbMetiersOk = MOCK_STUDENTS.filter((s) => s.onboarded && s.metiers >= config.obj4.target).length;
+  const students = getClasseStudents();
+  const n = students.length;
+  const nbProfilOk = students.filter((s) => s.onboarded).length;
+  const nbDomainesOk = students.filter((s) => s.onboarded && s.domaines >= config.obj2.target).length;
+  const nbFormOk = students.filter((s) => s.onboarded && s.formations >= config.obj3.target).length;
+  const nbMetiersOk = students.filter((s) => s.onboarded && s.metiers >= config.obj4.target).length;
 
   const jalonsRows = [
     { title: "Compléter le profil", periode: "Sans date limite", prog: Math.round((nbProfilOk / n) * 100) },

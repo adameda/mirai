@@ -1,10 +1,11 @@
 import Badge from "../components/Badge";
-import { MOCK_STUDENTS } from "../data/mockStudents";
+import { getClasseStudents } from "../services/classeService";
 import { T, grad } from "../constants/theme";
 import { useAppState } from "../hooks/useAppState";
 
 export default function ProfClasse() {
   useAppState();
+  const students = getClasseStudents();
   return (
     <div style={{ flex: 1, overflowY: "auto", padding: "40px 48px", background: T.bg, fontFamily: "'DM Sans',sans-serif" }}>
       <div style={{ marginBottom: 24 }}>
@@ -22,9 +23,9 @@ export default function ProfClasse() {
             </span>
           ))}
         </div>
-        {MOCK_STUDENTS.map((s, i) => {
+        {students.map((s, i) => {
           return (
-            <div key={i} style={{ display: "grid", gridTemplateColumns: "minmax(120px,1.15fr) 0.7fr 0.7fr 0.7fr 0.7fr", gap: 12, padding: "14px 20px", borderBottom: i < MOCK_STUDENTS.length - 1 ? `1px solid ${T.border}` : "none", alignItems: "center", background: i % 2 === 0 ? T.white : T.bg }}>
+            <div key={i} style={{ display: "grid", gridTemplateColumns: "minmax(120px,1.15fr) 0.7fr 0.7fr 0.7fr 0.7fr", gap: 12, padding: "14px 20px", borderBottom: i < students.length - 1 ? `1px solid ${T.border}` : "none", alignItems: "center", background: i % 2 === 0 ? T.white : T.bg }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
                 <div style={{ width: 30, height: 30, borderRadius: 9, background: grad, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, color: "white" }}>{s.prenom[0]}</div>
                 <span style={{ fontSize: 13, fontWeight: 700, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.prenom}</span>
