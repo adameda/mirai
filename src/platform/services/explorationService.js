@@ -1,64 +1,48 @@
 // Couche service — Exploration (domaines, formations, métiers)
-//
-// Toutes les fonctions wrappent les mocks actuels.
-// À l'étape 7, chaque fonction sera remplacée par un appel fetch vers le back.
-// Correspondances avec API_CONTRACT.md :
-//   getAllDomaines()              → GET /domaines
-//   getFormationsByDomaine()     → GET /formations?domaine_id=...
-//   getFormationById()           → GET /formations/:id
-//   getFormationByLabel()        → (supprimé côté API — les IDs seront toujours disponibles)
-//   getMetierById()              → GET /metiers/:id
-//   getMetierByLabel()           → (supprimé côté API)
-//   getMetiersForFormation()     → GET /metiers?formation_id=...
-//   getFormationsForMetier()     → via GET /metiers/:id (champ formations_min_requises)
-//   getSuggestedDomaines()       → GET /domaines?suggest=true
+// Étape 7 : tous les appels frappent le back via api.js
+// Correspondances API :
+//   getAllDomaines()          → GET /domaines
+//   getFormationsByDomaine()  → GET /formations?domaine_id=...
+//   getFormationById()        → GET /formations/:id
+//   getMetierById()           → GET /metiers/:id
+//   getMetiersForFormation()  → GET /metiers?formation_id=...
+//   getFormationsForMetier()  → via GET /metiers/:id (champ formations)
+//   getSuggestedDomaines()    → filtre client sur getAllDomaines()
 
-import {
-  ALL_DOMAINES,
-  FORMATIONS_DATA,
-  getFormationById as _getFormationById,
-  getFormationsByDomaine as _getFormationsByDomaine,
-} from "../data/formationsData";
-import { METIERS_DATA, getMetierById as _getMetierById } from "../data/metiersData";
-import { formationToMetiers, metierToFormations } from "../data/relationsData";
+import { api } from './api';
 
-export function getAllDomaines() {
-  return ALL_DOMAINES;
+export async function getAllDomaines() {
+  return api.get('/domaines');
 }
 
-export function getFormationsByDomaine(domaine) {
-  return _getFormationsByDomaine(domaine);
+export async function getFormationsByDomaine(domaineId) {
+  return api.get(`/formations?domaine_id=${domaineId}`);
 }
 
-export function getFormationById(id) {
-  return _getFormationById(id);
+export async function getFormationById(id) {
+  return api.get(`/formations/${id}`);
 }
 
-export function getFormationByLabel(label) {
-  return FORMATIONS_DATA.find((f) => f.label === label) || null;
+export async function getMetierById(id) {
+  return api.get(`/metiers/${id}`);
 }
 
-export function getMetierById(id) {
-  return _getMetierById(id);
+export async function getMetiersForFormation(formationId) {
+  return api.get(`/metiers?formation_id=${formationId}`);
 }
 
-export function getMetierByLabel(label) {
-  return METIERS_DATA.find((m) => m.label === label) || null;
+export async function getFormationsForMetier(metierId) {
+  const metier = await api.get(`/metiers/${metierId}`);
+  return metier.formations || [];
 }
 
-export function getMetiersForFormation(formationId) {
-  return (formationToMetiers[formationId] || []).map(_getMetierById).filter(Boolean);
-}
-
-export function getFormationsForMetier(metierId) {
-  return (metierToFormations[metierId] || []).map(_getFormationById).filter(Boolean);
-}
-
-// Retourne les domaines suggérés selon les réponses d'onboarding de l'élève.
-// Fallback sur les 3 premiers domaines si aucune correspondance trouvée.
-export function getSuggestedDomaines(answeredDomaines) {
-  const suggested = (answeredDomaines || [])
-    .filter((d) => d !== "Pas encore d'idee" && _getFormationsByDomaine(d).length > 0)
-    .slice(0, 3);
-  return suggested.length ? suggested : ALL_DOMAINES.slice(0, 3);
+// Retourne les domaines suggérés selon les domaines d'intérêt de l'onboarding.
+// answeredDomaines = tableau de labels libres saisis par l'élève.
+// On les compare (insensible à la casse) aux libellés des domaines réels.
+// Fallback sur les 3 premiers domaines si aucune correspondance.
+export async function getSuggestedDomaines(answeredDomaines) {
+  const all = await getAllDomaines();
+  const labels = (answeredDomaines || []).map(d => d.toLowerCase());
+  const matched = all.filter(d => labels.some(l => d.libelle.toLowerCase().includes(l) || l.includes(d.libelle.toLowerCase())));
+  return matched.length ? matched.slice(0, 3) : all.slice(0, 3);
 }

@@ -44,7 +44,7 @@ export default function Favoris() {
                 </button>
               )}
               <button
-                onClick={() => onRemove(item.type, item.refId || item.label)}
+                onClick={() => removeItem(item.type, item.refId || item.label)}
                 style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: T.mutedLight, padding: "4px 6px", borderRadius: 8, transition: "color 0.15s" }}
                 onMouseEnter={(e) => (e.target.style.color = T.coral)}
                 onMouseLeave={(e) => (e.target.style.color = T.mutedLight)}

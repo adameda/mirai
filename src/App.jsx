@@ -16,18 +16,21 @@ import { useAppState } from "./platform/hooks/useAppState";
 
 function AppShell() {
   const {
-    screen,
-    setScreen,
-    authMode,
-    setAuthMode,
-    user,
-    page,
-    completeAuth,
-    completeOnboarding,
-    isProf,
-    locked,
-    setPage,
+    screen, setScreen,
+    authMode, setAuthMode,
+    user, page,
+    loading,
+    completeAuth, completeOnboarding,
+    isProf, locked, setPage,
   } = useAppState();
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: "100vh", background: T.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <p style={{ fontSize: 14, color: T.muted, fontFamily: "'DM Sans',sans-serif" }}>Chargement…</p>
+      </div>
+    );
+  }
 
   if (screen === "landing") {
     return <Landing onLogin={() => { setAuthMode("login"); setScreen("auth"); }} onSignup={() => { setAuthMode("signup"); setScreen("auth"); }} />;
@@ -54,31 +57,21 @@ function AppShell() {
         </div>
       );
     }
-
     switch (page) {
-      case "dashboard":
-        return <DashboardEleve />;
-      case "exploration":
-        return <Exploration />;
-      case "favoris":
-        return <Favoris />;
-      case "chatbot":
-        return <Chatbot />;
-      default:
-        return null;
+      case "dashboard":   return <DashboardEleve />;
+      case "exploration": return <Exploration />;
+      case "favoris":     return <Favoris />;
+      case "chatbot":     return <Chatbot />;
+      default:            return null;
     }
   };
 
   const renderProf = () => {
     switch (page) {
-      case "prof-dashboard":
-        return <ProfDashboard />;
-      case "prof-classe":
-        return <ProfClasse />;
-      case "prof-jalons":
-        return <ProfJalons />;
-      default:
-        return null;
+      case "prof-dashboard": return <ProfDashboard />;
+      case "prof-classe":    return <ProfClasse />;
+      case "prof-jalons":    return <ProfJalons />;
+      default:               return null;
     }
   };
 

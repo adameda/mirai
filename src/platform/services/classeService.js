@@ -1,12 +1,24 @@
 // Couche service — Classe (côté professeur)
-//
-// Wrappent les mocks actuels.
-// À l'étape 7, remplacé par des appels fetch vers le back.
-// Correspondances avec API_CONTRACT.md :
-//   getClasseStudents()   → GET /classes/me (champ eleves)
+// Étape 7 : appels réels vers le back
+// Correspondances API :
+//   getClasseStudents()  → GET /classe      (champ eleves)
+//   getClasseStats()     → GET /classe/stats
 
-import { MOCK_STUDENTS } from "../data/mockStudents";
+import { api } from './api';
 
-export function getClasseStudents() {
-  return MOCK_STUDENTS;
+export async function getClasseStudents() {
+  const classe = await api.get('/classe');
+  // On normalise les champs pour rester compatibles avec le front existant
+  return (classe.eleves || []).map(e => ({
+    id:         e.id,
+    prenom:     e.prenom,
+    onboarded:  e.onboarded,
+    domaines:   e.nb_domaines,
+    formations: e.nb_formations,
+    metiers:    e.nb_metiers,
+  }));
+}
+
+export async function getClasseStats() {
+  return api.get('/classe/stats');
 }
