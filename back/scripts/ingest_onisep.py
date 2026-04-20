@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Script d'ingestion des fiches Onisep XML.
+Script d'ingestion des fiches Onisep (XML formations + XML métiers + CSV métiers).
 
 Usage (depuis le dossier back/) :
     python -m scripts.ingest_onisep
@@ -12,319 +12,159 @@ Prérequis :
 
 Ce script est idempotent : relancer efface et recrée toutes les données Onisep.
 Les données utilisateurs (comptes, favoris, classes) ne sont PAS touchées.
+
+Architecture du mapping :
+    XML formations → sous_domaine_web → [CSV] → macro-domaine Onisep → [MACRO_DOMAINE_MAPPING] → domaine Mirai
+    CSV métiers    → domaine/sous-domaine       → [MACRO_DOMAINE_MAPPING] → domaine Mirai
 """
 
+import csv
 import re
 import sys
 import logging
 from pathlib import Path
 from lxml import etree
 
-# Ajoute le dossier back/ au path pour importer app/
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.core.database import engine, SessionLocal
 from app.models.base import Base
-from app.models.onisep import Domaine, Formation, Metier, FormationDomaine, FormationMetier
+from app.models.onisep import (
+    Domaine, Formation, Metier,
+    FormationDomaine, FormationMetier, MetierDomaine,
+)
+from app.models.favori import Favori
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
-# ── Chemins XML ────────────────────────────────────────────────────────────
+# ── Chemins ──────────────────────────────────────────────────────────────────
 
 DATA_DIR = Path(__file__).parent.parent.parent / "data"
 XML_FORMATIONS = DATA_DIR / "Onisep_Ideo_Fiches_Formations_10022026.xml"
-XML_METIERS = DATA_DIR / "Onisep_Ideo_Fiches_Metiers_10022026.xml"
+XML_METIERS    = DATA_DIR / "Onisep_Ideo_Fiches_Metiers_10022026.xml"
+CSV_FORMATIONS = DATA_DIR / "ideo-formations_initiales_en_france.csv"
+CSV_METIERS    = DATA_DIR / "ideo-metiers_onisep.csv"
 
-# ── Niveaux d'études ciblés (lycéens → post-bac) ──────────────────────────
+# ── Niveaux d'études ciblés (lycéens → post-bac) ─────────────────────────────
 
 NIVEAUX_CIBLES = {"bac + 2", "bac + 3", "bac + 4", "bac + 5"}
 
-# ── Macro-domaines Mirai ───────────────────────────────────────────────────
-
-MACRO_DOMAINES = [
-    ("Informatique & Tech",         "informatique-tech"),
-    ("Ingénierie & Industries",     "ingenierie-industries"),
-    ("Énergie & Environnement",     "energie-environnement"),
-    ("Sciences",                    "sciences"),
-    ("Commerce & Gestion",          "commerce-gestion"),
-    ("Arts & Design",               "arts-design"),
-    ("BTP & Architecture",          "btp-architecture"),
-    ("Santé & Social",              "sante-social"),
-    ("Droit & Sécurité",            "droit-securite"),
-    ("Agriculture & Agroalimentaire", "agriculture-agroalimentaire"),
-    ("Communication & Médias",      "communication-medias"),
-    ("Finance & Assurance",         "finance-assurance"),
-    ("Enseignement & Formation",    "enseignement-formation"),
-    ("Hôtellerie & Tourisme",       "hotellerie-tourisme"),
-    ("Sport & Animation",           "sport-animation"),
-]
-
-# ── Mapping sous_domaine_web (Onisep) → macro-domaine Mirai ───────────────
-# Clé : libellé exact du sous_domaine_web dans le XML
-# Valeur : libellé du macro-domaine Mirai
-
-SOUS_DOMAINE_MAPPING: dict[str, str] = {
-    # Informatique & Tech
-    "informatique (généralités)":               "Informatique & Tech",
-    "systèmes et réseaux":                      "Informatique & Tech",
-    "bases de données":                         "Informatique & Tech",
-    "développement, programmation, logiciel":   "Informatique & Tech",
-    "études et développement":                  "Informatique & Tech",
-    "multimédia":                               "Informatique & Tech",
-    "télécommunications":                       "Informatique & Tech",
-    "informatique de gestion":                  "Informatique & Tech",
-    "intelligence artificielle":               "Informatique & Tech",
-    "cybersécurité":                            "Informatique & Tech",
-    "réseaux informatiques":                    "Informatique & Tech",
-
-    # Ingénierie & Industries
-    "électronique":                             "Ingénierie & Industries",
-    "maintenance, qualité":                     "Ingénierie & Industries",
-    "fonction production (généralités)":        "Ingénierie & Industries",
-    "mécanique (généralités)":                  "Ingénierie & Industries",
-    "automatismes":                             "Ingénierie & Industries",
-    "méthodes industrialisation":               "Ingénierie & Industries",
-    "aéronautique":                             "Ingénierie & Industries",
-    "génie industriel":                         "Ingénierie & Industries",
-    "matériaux":                                "Ingénierie & Industries",
-    "robotique":                                "Ingénierie & Industries",
-    "génie électrique":                         "Ingénierie & Industries",
-    "génie mécanique":                          "Ingénierie & Industries",
-    "automobile":                               "Ingénierie & Industries",
-    "aéronautique, spatial":                    "Ingénierie & Industries",
-    "construction navale":                      "Ingénierie & Industries",
-    "ferroviaire":                              "Ingénierie & Industries",
-    "plasturgie":                               "Ingénierie & Industries",
-    "métallurgie":                              "Ingénierie & Industries",
-    "textile":                                  "Ingénierie & Industries",
-    "imprimerie":                               "Ingénierie & Industries",
-    "industrie (généralités)":                  "Ingénierie & Industries",
-
-    # Énergie & Environnement
-    "énergies":                                 "Énergie & Environnement",
-    "environnement (généralités)":              "Énergie & Environnement",
-    "développement durable":                    "Énergie & Environnement",
-    "énergies renouvelables":                   "Énergie & Environnement",
-    "traitement des eaux":                      "Énergie & Environnement",
-    "traitement des déchets":                   "Énergie & Environnement",
-    "nucléaire":                                "Énergie & Environnement",
-
-    # Sciences
-    "physique":                                 "Sciences",
-    "chimie":                                   "Sciences",
-    "biologie":                                 "Sciences",
-    "mathématiques":                            "Sciences",
-    "sciences de la vie et de la terre":        "Sciences",
-    "biochimie":                                "Sciences",
-    "sciences physiques":                       "Sciences",
-    "géologie":                                 "Sciences",
-    "sciences économiques":                     "Sciences",
-    "statistiques":                             "Sciences",
-
-    # Commerce & Gestion
-    "administration de l'entreprise":           "Commerce & Gestion",
-    "marketing, vente":                         "Commerce & Gestion",
-    "logistique":                               "Commerce & Gestion",
-    "transport":                                "Commerce & Gestion",
-    "commerce (généralités)":                   "Commerce & Gestion",
-    "commerce international":                   "Commerce & Gestion",
-    "gestion des entreprises":                  "Commerce & Gestion",
-    "ressources humaines":                      "Commerce & Gestion",
-    "management":                               "Commerce & Gestion",
-    "entrepreneuriat":                          "Commerce & Gestion",
-    "achats":                                   "Commerce & Gestion",
-
-    # Arts & Design
-    "arts graphiques":                          "Arts & Design",
-    "artisanat d'art":                          "Arts & Design",
-    "design":                                   "Arts & Design",
-    "mode":                                     "Arts & Design",
-    "arts plastiques":                          "Arts & Design",
-    "cinéma, audiovisuel":                      "Arts & Design",
-    "musique":                                  "Arts & Design",
-    "arts du spectacle":                        "Arts & Design",
-    "photographie":                             "Arts & Design",
-    "décoration":                               "Arts & Design",
-    "architecture intérieure":                  "Arts & Design",
-    "bijouterie, joaillerie":                   "Arts & Design",
-    "lutherie":                                 "Arts & Design",
-    "ébénisterie":                              "Arts & Design",
-
-    # BTP & Architecture
-    "génie civil, construction (généralités)":  "BTP & Architecture",
-    "bâtiment (généralités)":                   "BTP & Architecture",
-    "architecture":                             "BTP & Architecture",
-    "urbanisme":                                "BTP & Architecture",
-    "topographie":                              "BTP & Architecture",
-    "travaux publics":                          "BTP & Architecture",
-    "géomètre":                                 "BTP & Architecture",
-    "paysage":                                  "BTP & Architecture",
-    "mines et carrières":                       "BTP & Architecture",
-
-    # Santé & Social
-    "santé (généralités)":                      "Santé & Social",
-    "médecine":                                 "Santé & Social",
-    "soins infirmiers":                         "Santé & Social",
-    "pharmacie":                                "Santé & Social",
-    "kinésithérapie":                           "Santé & Social",
-    "biologie médicale":                        "Santé & Social",
-    "paramédical (généralités)":                "Santé & Social",
-    "action sociale":                           "Santé & Social",
-    "travail social":                           "Santé & Social",
-    "aide à la personne":                       "Santé & Social",
-    "psychologie":                              "Santé & Social",
-    "orthophonie":                              "Santé & Social",
-    "ergothérapie":                             "Santé & Social",
-    "optique":                                  "Santé & Social",
-    "dentaire":                                 "Santé & Social",
-    "vétérinaire":                              "Santé & Social",
-
-    # Droit & Sécurité
-    "droit":                                    "Droit & Sécurité",
-    "justice":                                  "Droit & Sécurité",
-    "sécurité publique":                        "Droit & Sécurité",
-    "défense":                                  "Droit & Sécurité",
-    "notariat":                                 "Droit & Sécurité",
-    "police, gendarmerie":                      "Droit & Sécurité",
-
-    # Agriculture & Agroalimentaire
-    "agroalimentaire":                          "Agriculture & Agroalimentaire",
-    "agriculture (généralités)":                "Agriculture & Agroalimentaire",
-    "viticulture, oenologie":                   "Agriculture & Agroalimentaire",
-    "horticulture":                             "Agriculture & Agroalimentaire",
-    "élevage":                                  "Agriculture & Agroalimentaire",
-    "sylviculture, forêts":                     "Agriculture & Agroalimentaire",
-    "pêche":                                    "Agriculture & Agroalimentaire",
-    "cuisine, art culinaire":                   "Agriculture & Agroalimentaire",
-
-    # Communication & Médias
-    "communication (généralités)":              "Communication & Médias",
-    "journalisme":                              "Communication & Médias",
-    "édition":                                  "Communication & Médias",
-    "information et documentation":             "Communication & Médias",
-    "relations publiques":                      "Communication & Médias",
-    "traduction":                               "Communication & Médias",
-    "langues":                                  "Communication & Médias",
-
-    # Finance & Assurance
-    "comptabilité, gestion financière":         "Finance & Assurance",
-    "banque, finance":                          "Finance & Assurance",
-    "assurance":                                "Finance & Assurance",
-    "audit, contrôle de gestion":               "Finance & Assurance",
-
-    # Enseignement & Formation
-    "enseignement (généralités)":               "Enseignement & Formation",
-    "formation":                                "Enseignement & Formation",
-    "éducation":                                "Enseignement & Formation",
-
-    # Hôtellerie & Tourisme
-    "hôtellerie":                               "Hôtellerie & Tourisme",
-    "tourisme":                                 "Hôtellerie & Tourisme",
-    "restauration":                             "Hôtellerie & Tourisme",
-    "boulangerie, pâtisserie":                  "Hôtellerie & Tourisme",
-
-    # Sport & Animation
-    "sport (généralités)":                      "Sport & Animation",
-    "animation":                                "Sport & Animation",
-    "activités physiques et sportives":         "Sport & Animation",
-    "jeunesse, éducation populaire":            "Sport & Animation",
-    "sport":                                    "Sport & Animation",
-
-    # Informatique & Tech (suppléments)
-    "informatique industrielle et technologique": "Informatique & Tech",
-    "informatique pour la recherche":           "Informatique & Tech",
-
-    # Ingénierie & Industries (suppléments)
-    "fabrication, productique":                 "Ingénierie & Industries",
-    "métallurgie, sidérurgie":                  "Ingénierie & Industries",
-    "travail des métaux":                       "Ingénierie & Industries",
-    "électrotechnique":                         "Ingénierie & Industries",
-    "bois":                                     "Ingénierie & Industries",
-    "céramique, composites":                    "Ingénierie & Industries",
-    "papier, carton":                           "Ingénierie & Industries",
-    "verre":                                    "Ingénierie & Industries",
-    "cycle, moto":                              "Ingénierie & Industries",
-    "engins":                                   "Ingénierie & Industries",
-    "équipement technique":                     "Ingénierie & Industries",
-    "textile, habillement":                     "Ingénierie & Industries",
-
-    # Énergie & Environnement (suppléments)
-    "déchets, pollutions et risques":           "Énergie & Environnement",
-    "gestion de l'eau":                         "Énergie & Environnement",
-    "protection des espaces naturels":          "Énergie & Environnement",
-
-    # Sciences (suppléments)
-    "géographie":                               "Sciences",
-    "histoire":                                 "Sciences",
-    "philosophie":                              "Sciences",
-    "sciences de la Terre":                     "Sciences",
-    "sciences humaines et sociales (généralités)": "Sciences",
-    "sciences politiques":                      "Sciences",
-    "sciences sociales":                        "Sciences",
-
-    # Commerce & Gestion (suppléments)
-    "achat, approvisionnement":                 "Commerce & Gestion",
-    "grande distribution et petits commerces":  "Commerce & Gestion",
-    "secrétariat":                              "Commerce & Gestion",
-    "propreté":                                 "Commerce & Gestion",
-
-    # Arts & Design (suppléments)
-    "activités culturelles":                    "Arts & Design",
-    "arts appliqués":                           "Arts & Design",
-    "histoire de l'art":                        "Arts & Design",
-    "restauration d'art":                       "Arts & Design",
-    "ameublement":                              "Arts & Design",
-    "audiovisuel":                              "Communication & Médias",
-
-    # BTP & Architecture (suppléments)
-    "agencement":                               "BTP & Architecture",
-    "aménagement du territoire":                "BTP & Architecture",
-    "aménagement paysager":                     "BTP & Architecture",
-    "bureau d'études BTP":                      "BTP & Architecture",
-    "charpente, couverture":                    "BTP & Architecture",
-    "finition":                                 "BTP & Architecture",
-    "génie civil":                              "BTP & Architecture",
-    "immobilier":                               "BTP & Architecture",
-    "menuiserie":                               "BTP & Architecture",
-    "plâtrerie":                                "BTP & Architecture",
-
-    # Santé & Social (suppléments)
-    "médical":                                  "Santé & Social",
-    "paramédical":                              "Santé & Social",
-    "esthétique":                               "Santé & Social",
-
-    # Droit & Sécurité (suppléments)
-    "activité judiciaire":                      "Droit & Sécurité",
-    "droit (généralités)":                      "Droit & Sécurité",
-    "droit privé":                              "Droit & Sécurité",
-    "sécurité, prévention":                     "Droit & Sécurité",
-
-    # Agriculture & Agroalimentaire (suppléments)
-    "cultures":                                 "Agriculture & Agroalimentaire",
-    "développement agricole":                   "Agriculture & Agroalimentaire",
-    "élevage, aquaculture":                     "Agriculture & Agroalimentaire",
-    "forêt":                                    "Agriculture & Agroalimentaire",
-    "machinisme agricole":                      "Agriculture & Agroalimentaire",
-
-    # Communication & Médias (suppléments)
-    "bibliothèque, documentation":              "Communication & Médias",
-    "communication":                            "Communication & Médias",
-    "industries graphiques":                    "Communication & Médias",
-    "journalisme, édition, publicité":          "Communication & Médias",
-    "lettres, linguistique":                    "Communication & Médias",
-
-    # Finance & Assurance (suppléments)
-    "assurances":                               "Finance & Assurance",
-    "banque":                                   "Finance & Assurance",
-    "comptabilité":                             "Finance & Assurance",
-    "finances":                                 "Finance & Assurance",
-
-    # Enseignement & Formation (suppléments)
-    "enseignement":                             "Enseignement & Formation",
+# Types de formations inclus même sans description ni texte d'accès.
+# Onisep ne remplit pas ces champs pour les écoles d'ingénieurs et de commerce :
+# les fiches sont vides mais le nom + niveau + lien Onisep restent utiles.
+TYPE_LIBELLE_SANS_CONTENU_OK = {
+    "diplôme d'ingénieur",
+    "diplôme d'ingénieur spécialisé",
+    "diplôme d'école de commerce visé de niveau bac + 4 ou 5",
+    "diplôme d'école de commerce visé (bac + 3)",
+    "bachelor en sciences et ingénierie",
 }
 
-# ── Utilitaires ────────────────────────────────────────────────────────────
+# ── 13 domaines Mirai ────────────────────────────────────────────────────────
+
+MIRAI_DOMAINES = [
+    ("Informatique & Numérique",     "informatique-numerique"),
+    ("Ingénierie & Industrie",       "ingenierie-industrie"),
+    ("Énergie & Environnement",      "energie-environnement"),
+    ("Commerce & Marketing",         "commerce-marketing"),
+    ("Gestion & Finance",            "gestion-finance"),
+    ("Communication & Médias",       "communication-medias"),
+    ("Arts & Design",                "arts-design"),
+    ("Santé & Social",               "sante-social"),
+    ("Sciences",                     "sciences"),
+    ("Droit",                        "droit"),
+    ("Sciences Humaines & Langues",  "sciences-humaines-langues"),
+    ("BTP & Architecture",           "btp-architecture"),
+    ("Hôtellerie & Tourisme",        "hotellerie-tourisme"),
+]
+
+# ── Mapping macro-domaine Onisep (minuscules) → domaine Mirai ────────────────
+# 18 entrées au lieu des ~200 du mapping précédent.
+# Hors scope v1 : "agriculture, animaux" et "armée, sécurité".
+
+MACRO_DOMAINE_MAPPING: dict[str, str] = {
+    "informatique, internet":                        "Informatique & Numérique",
+    "matières premières, fabrication, industries":   "Ingénierie & Industrie",
+    "mécanique":                                     "Ingénierie & Industrie",
+    "électricité, électronique, robotique":          "Ingénierie & Industrie",
+    "environnement, énergies, propreté":             "Énergie & Environnement",
+    "commerce, marketing, vente":                    "Commerce & Marketing",
+    "logistique, transport":                         "Commerce & Marketing",
+    "gestion des entreprises, comptabilité":         "Gestion & Finance",
+    "banque, assurances, immobilier":                "Gestion & Finance",
+    "information-communication, audiovisuel":        "Communication & Médias",
+    "arts, culture, artisanat":                      "Arts & Design",
+    "santé, social, sport":                          "Santé & Social",
+    "sciences":                                      "Sciences",
+    "économie, droit, politique":                    "Droit",
+    "lettres, langues, enseignement":                "Sciences Humaines & Langues",
+    "histoire-géographie, psychologie, sociologie":  "Sciences Humaines & Langues",
+    "construction, architecture, travaux publics":   "BTP & Architecture",
+    "hôtellerie-restauration, tourisme":             "Hôtellerie & Tourisme",
+}
+
+# ── Chargement des mappings CSV ───────────────────────────────────────────────
+
+def build_sous_domaine_to_macro(csv_path: Path) -> dict[str, str]:
+    """
+    Construit le mapping sous_domaine_web → macro-domaine Onisep depuis le CSV formations.
+    Les deux clés et valeurs sont en minuscules.
+    Ex : "informatique (généralités)" → "informatique, internet"
+    """
+    sous_to_macro: dict[str, str] = {}
+    with open(csv_path, encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f, delimiter=";")
+        for row in reader:
+            ds = row.get("domaine/sous-domaine", "")
+            if not ds:
+                continue
+            for part in ds.split("|"):
+                part = part.strip()
+                if "/" not in part:
+                    continue
+                macro, sous = part.split("/", 1)
+                key = sous.strip().lower()
+                if key not in sous_to_macro:
+                    sous_to_macro[key] = macro.strip().lower()
+    log.info(f"  Mapping sous-domaines chargé : {len(sous_to_macro)} entrées")
+    return sous_to_macro
+
+
+def load_metier_domaines(csv_path: Path) -> dict[str, set[str]]:
+    """
+    Charge le mapping metier_id → set[macro_domaine_onisep] depuis le CSV métiers.
+    L'identifiant MET.XXX est extrait de l'URL Onisep présente dans le CSV.
+    """
+    metier_domaines: dict[str, set[str]] = {}
+    with open(csv_path, encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f, delimiter=";")
+        for row in reader:
+            url = row.get("lien site onisep.fr", "")
+            m = re.search(r"MET\.(\d+)", url)
+            if not m:
+                continue
+            met_id = "MET." + m.group(1)
+
+            ds = row.get("domaine/sous-domaine", "")
+            macros: set[str] = set()
+            for part in ds.split("|"):
+                part = part.strip()
+                if "/" in part:
+                    macro = part.split("/")[0].strip().lower()
+                    macros.add(macro)
+            if macros:
+                metier_domaines[met_id] = macros
+    log.info(f"  Domaines métiers chargés depuis CSV : {len(metier_domaines)} métiers")
+    return metier_domaines
+
+
+def map_to_mirai(onisep_macro: str) -> str | None:
+    """Mappe un macro-domaine Onisep (en minuscules) vers un domaine Mirai."""
+    return MACRO_DOMAINE_MAPPING.get(onisep_macro.strip().lower())
+
+
+# ── Utilitaires XML ───────────────────────────────────────────────────────────
 
 def strip_html(html_text: str | None) -> str | None:
     """Supprime les balises HTML et normalise les espaces."""
@@ -350,14 +190,12 @@ def clean_duree(duree: str | None) -> str | None:
     return duree.strip('"').strip("'").strip() or None
 
 
-def map_sous_domaine(libelle: str) -> str | None:
-    """Mappe un sous_domaine_web vers un macro-domaine Mirai."""
-    return SOUS_DOMAINE_MAPPING.get(libelle.lower().strip())
+# ── Parsing formations ────────────────────────────────────────────────────────
 
-
-# ── Parsing formations ─────────────────────────────────────────────────────
-
-def parse_formations(xml_path: Path) -> tuple[list[dict], list[tuple[str, str]]]:
+def parse_formations(
+    xml_path: Path,
+    sous_to_macro: dict[str, str],
+) -> tuple[list[dict], list[tuple[str, str]]]:
     """
     Parse le XML formations.
     Retourne :
@@ -372,7 +210,7 @@ def parse_formations(xml_path: Path) -> tuple[list[dict], list[tuple[str, str]]]
     formation_metier_pairs = []
     skipped_niveau = 0
     skipped_content = 0
-    unmapped_domaines: set[str] = set()
+    unmapped_sous_domaines: set[str] = set()
 
     for elem in root.findall("formation"):
         identifiant = get_text(elem, "identifiant")
@@ -386,25 +224,20 @@ def parse_formations(xml_path: Path) -> tuple[list[dict], list[tuple[str, str]]]
             skipped_niveau += 1
             continue
 
-        # ── Champs texte (CDATA HTML) ──
-        desc_court_raw = get_text(elem, "descriptif_format_court")
-        acces_raw = get_text(elem, "descriptif_acces")
-        description_courte = strip_html(desc_court_raw)
-        acces = strip_html(acces_raw)
-
-        # Filtre qualité : au moins un des deux champs doit être renseigné
-        if not description_courte and not acces:
-            skipped_content += 1
-            continue
-
         # ── Type de formation ──
         type_elem = elem.find("type_Formation")
-        type_sigle = get_text(type_elem, "type_formation_sigle") if type_elem is not None else None
-        type_libelle_court = get_text(type_elem, "type_formation_libelle_court") if type_elem is not None else None
-        type_libelle = get_text(type_elem, "type_formation_libelle") if type_elem is not None else None
+        type_sigle         = get_text(type_elem, "type_formation_sigle")           if type_elem is not None else None
+        type_libelle_court = get_text(type_elem, "type_formation_libelle_court")   if type_elem is not None else None
+        type_libelle       = get_text(type_elem, "type_formation_libelle")         if type_elem is not None else None
 
-        # ── Niveau certification ──
-        niveau_cert = get_text(elem, "niveau_certification")
+        # ── Champs texte ──
+        description_courte = strip_html(get_text(elem, "descriptif_format_court"))
+        acces = strip_html(get_text(elem, "descriptif_acces"))
+
+        if not description_courte and not acces:
+            if type_libelle not in TYPE_LIBELLE_SANS_CONTENU_OK:
+                skipped_content += 1
+                continue
 
         # ── Poursuites d'études ──
         poursuites = []
@@ -414,15 +247,22 @@ def parse_formations(xml_path: Path) -> tuple[list[dict], list[tuple[str, str]]]
             if pe_id and pe_libelle:
                 poursuites.append({"id": pe_id, "libelle": pe_libelle})
 
-        # ── Sous-domaines → macro-domaines ──
+        # ── Sous-domaines (pour le mapping domaine) ──
         sous_domaines_raw = []
         for sd in elem.findall(".//sous_domaine_web"):
             sd_id = get_text(sd, "id")
             sd_libelle = get_text(sd, "libelle")
-            if sd_libelle:
-                sous_domaines_raw.append((sd_id, sd_libelle))
-                if not map_sous_domaine(sd_libelle):
-                    unmapped_domaines.add(sd_libelle)
+            if not sd_libelle:
+                continue
+            sous_domaines_raw.append((sd_id, sd_libelle))
+
+            # Log des sous-domaines non mappables
+            sd_key = sd_libelle.lower().strip()
+            onisep_macro = sous_to_macro.get(sd_key)
+            if not onisep_macro:
+                unmapped_sous_domaines.add(sd_libelle)
+            elif map_to_mirai(onisep_macro) is None:
+                unmapped_sous_domaines.add(f"{sd_libelle} (macro: {onisep_macro})")
 
         # ── Métiers accessibles depuis cette formation ──
         for metier_elem in elem.findall(".//metiers_formation/metier"):
@@ -440,26 +280,29 @@ def parse_formations(xml_path: Path) -> tuple[list[dict], list[tuple[str, str]]]
             "type_libelle": type_libelle,
             "duree": clean_duree(get_text(elem, "duree_formation")),
             "niveau_etudes": niveau_etudes,
-            "niveau_certification": niveau_cert,
+            "niveau_certification": get_text(elem, "niveau_certification"),
             "description_courte": description_courte,
             "acces": acces,
             "attendus": strip_html(get_text(elem, "attendus")),
             "poursuite_etudes": poursuites or None,
             "url": get_text(elem, "url"),
-            "sous_domaines": sous_domaines_raw,  # [(id, libelle), ...]
+            "sous_domaines": sous_domaines_raw,
         })
 
     log.info(
         f"  Formations retenues : {len(formations)} "
         f"(ignorées niveau : {skipped_niveau}, ignorées contenu : {skipped_content})"
     )
-    if unmapped_domaines:
-        log.warning(f"  Sous-domaines non mappés ({len(unmapped_domaines)}) : {sorted(unmapped_domaines)}")
+    if unmapped_sous_domaines:
+        log.warning(
+            f"  Sous-domaines hors scope ou non mappés ({len(unmapped_sous_domaines)}) : "
+            f"{sorted(unmapped_sous_domaines)}"
+        )
 
     return formations, formation_metier_pairs
 
 
-# ── Parsing métiers ────────────────────────────────────────────────────────
+# ── Parsing métiers ───────────────────────────────────────────────────────────
 
 def parse_metiers(xml_path: Path) -> list[dict]:
     """Parse le XML métiers. Retourne une liste de dicts prêts à insérer."""
@@ -475,27 +318,25 @@ def parse_metiers(xml_path: Path) -> list[dict]:
             continue
 
         # ── Synonymes ──
-        synonymes = []
-        for syn in elem.findall(".//synonymes/synonyme"):
-            nom = get_text(syn, "nom_metier")
-            if nom:
-                synonymes.append(nom)
+        synonymes = [
+            get_text(syn, "nom_metier")
+            for syn in elem.findall(".//synonymes/synonyme")
+            if get_text(syn, "nom_metier")
+        ]
 
         # ── Secteurs d'activité ──
-        secteurs = []
-        for sa in elem.findall(".//secteur_activite"):
-            sa_id = get_text(sa, "id")
-            sa_libelle = get_text(sa, "libelle")
-            if sa_id and sa_libelle:
-                secteurs.append({"id": sa_id, "libelle": sa_libelle})
+        secteurs = [
+            {"id": get_text(sa, "id"), "libelle": get_text(sa, "libelle")}
+            for sa in elem.findall(".//secteur_activite")
+            if get_text(sa, "id") and get_text(sa, "libelle")
+        ]
 
         # ── Centres d'intérêt ──
-        centres = []
-        for ci in elem.findall(".//centre_interet"):
-            ci_id = get_text(ci, "id")
-            ci_libelle = get_text(ci, "libelle")
-            if ci_id and ci_libelle:
-                centres.append({"id": ci_id, "libelle": ci_libelle})
+        centres = [
+            {"id": get_text(ci, "id"), "libelle": get_text(ci, "libelle")}
+            for ci in elem.findall(".//centre_interet")
+            if get_text(ci, "id") and get_text(ci, "libelle")
+        ]
 
         # ── Niveau accès min ──
         niveau_elem = elem.find("niveau_acces_min")
@@ -506,7 +347,6 @@ def parse_metiers(xml_path: Path) -> list[dict]:
         vp_raw = get_text(elem, "vie_professionnelle")
         if vp_raw:
             vp_text = strip_html(vp_raw)
-            # Extrait "A partir de X euros brut par mois"
             match = re.search(r"(A partir de .+?euros brut par mois[^.]*)", vp_text or "")
             if match:
                 salaire = match.group(1).strip()
@@ -541,22 +381,32 @@ def parse_metiers(xml_path: Path) -> list[dict]:
     return metiers
 
 
-# ── Ingestion en base ──────────────────────────────────────────────────────
+# ── Ingestion en base ─────────────────────────────────────────────────────────
 
 def ingest():
     log.info("=== Démarrage de l'ingestion Onisep ===")
 
-    # Crée les tables si elles n'existent pas
     Base.metadata.create_all(bind=engine)
 
-    # ── 1. Parse les XML (en mémoire avant d'ouvrir la session) ──
-    formations_data, fm_pairs = parse_formations(XML_FORMATIONS)
+    # ── 1. Chargement des mappings CSV ──
+    log.info("Chargement des mappings CSV...")
+    sous_to_macro = build_sous_domaine_to_macro(CSV_FORMATIONS)
+    metier_domaines = load_metier_domaines(CSV_METIERS)
+
+    # ── 2. Parse des XML ──
+    formations_data, fm_pairs = parse_formations(XML_FORMATIONS, sous_to_macro)
     metiers_data = parse_metiers(XML_METIERS)
 
     db = SessionLocal()
     try:
-        # ── 2. Purge des données Onisep existantes ──
+        # ── 3. Purge des données Onisep existantes ──
         log.info("Purge des données Onisep existantes...")
+        # Les favoris référencent formations, métiers et domaines — à supprimer en premier.
+        # Ils seront de toute façon invalides après une réingestion (IDs recréés).
+        nb_favoris = db.query(Favori).delete()
+        if nb_favoris:
+            log.warning(f"  {nb_favoris} favori(s) supprimé(s) (invalidés par la réingestion)")
+        db.execute(MetierDomaine.delete())
         db.execute(FormationMetier.delete())
         db.execute(FormationDomaine.delete())
         db.query(Formation).delete()
@@ -564,54 +414,61 @@ def ingest():
         db.query(Domaine).delete()
         db.commit()
 
-        # ── 3. Seed des macro-domaines Mirai ──
-        log.info("Insertion des macro-domaines...")
+        # ── 4. Seed des 13 domaines Mirai ──
+        log.info(f"Insertion des {len(MIRAI_DOMAINES)} domaines Mirai...")
         domaine_by_libelle: dict[str, Domaine] = {}
-        for libelle, slug in MACRO_DOMAINES:
+        for libelle, slug in MIRAI_DOMAINES:
             d = Domaine(libelle=libelle, slug=slug)
             db.add(d)
             domaine_by_libelle[libelle] = d
-        db.flush()  # récupère les IDs auto-incrémentés
+        db.flush()
 
-        # ── 4. Insertion des formations ──
+        # ── 5. Insertion des formations + liens formation ↔ domaine ──
         log.info(f"Insertion de {len(formations_data)} formations...")
         formation_by_id: dict[str, Formation] = {}
+        formations_sans_domaine = 0
 
         for fdata in formations_data:
             sous_domaines = fdata.pop("sous_domaines")
-
             f = Formation(**fdata)
 
-            # Résolution des macro-domaines
-            macro_libelles_vus: set[str] = set()
+            mirai_libelles_vus: set[str] = set()
             for _, sd_libelle in sous_domaines:
-                macro = map_sous_domaine(sd_libelle)
-                if macro and macro not in macro_libelles_vus:
-                    domaine_obj = domaine_by_libelle.get(macro)
+                # Étape 1 : sous_domaine → macro Onisep (depuis CSV)
+                onisep_macro = sous_to_macro.get(sd_libelle.lower().strip())
+                if not onisep_macro:
+                    continue
+                # Étape 2 : macro Onisep → domaine Mirai
+                mirai_libelle = map_to_mirai(onisep_macro)
+                if mirai_libelle and mirai_libelle not in mirai_libelles_vus:
+                    domaine_obj = domaine_by_libelle.get(mirai_libelle)
                     if domaine_obj:
                         f.domaines.append(domaine_obj)
-                        macro_libelles_vus.add(macro)
+                        mirai_libelles_vus.add(mirai_libelle)
+
+            if not mirai_libelles_vus:
+                formations_sans_domaine += 1
 
             db.add(f)
             formation_by_id[f.id] = f
 
         db.flush()
+        if formations_sans_domaine:
+            log.warning(f"  Formations sans domaine (hors scope) : {formations_sans_domaine}")
 
-        # ── 5. Insertion des métiers ──
+        # ── 6. Insertion des métiers ──
         log.info(f"Insertion de {len(metiers_data)} métiers...")
         metier_by_id: dict[str, Metier] = {}
-
         for mdata in metiers_data:
             m = Metier(**mdata)
             db.add(m)
             metier_by_id[m.id] = m
-
         db.flush()
 
-        # ── 6. Liens formation ↔ métier ──
+        # ── 7. Liens formation ↔ métier ──
         log.info(f"Création des liens formation↔métier ({len(fm_pairs)} paires brutes)...")
         seen_pairs: set[tuple[str, str]] = set()
-        nb_liens = 0
+        nb_liens_fm = 0
         for formation_id, metier_id in fm_pairs:
             pair = (formation_id, metier_id)
             if pair in seen_pairs:
@@ -621,10 +478,33 @@ def ingest():
             metier = metier_by_id.get(metier_id)
             if formation and metier:
                 formation.metiers.append(metier)
-                nb_liens += 1
+                nb_liens_fm += 1
+        log.info(f"  Liens formation↔métier créés : {nb_liens_fm}")
+
+        # ── 8. Liens métier ↔ domaine (depuis CSV) ──
+        log.info("Création des liens métier↔domaine depuis le CSV...")
+        nb_liens_md = 0
+        metiers_sans_domaine = 0
+        for met_id, onisep_macros in metier_domaines.items():
+            metier = metier_by_id.get(met_id)
+            if not metier:
+                continue
+            mirai_libelles_vus: set[str] = set()
+            for onisep_macro in onisep_macros:
+                mirai_libelle = map_to_mirai(onisep_macro)
+                if mirai_libelle and mirai_libelle not in mirai_libelles_vus:
+                    domaine_obj = domaine_by_libelle.get(mirai_libelle)
+                    if domaine_obj:
+                        metier.domaines.append(domaine_obj)
+                        mirai_libelles_vus.add(mirai_libelle)
+                        nb_liens_md += 1
+            if not mirai_libelles_vus:
+                metiers_sans_domaine += 1
+        log.info(f"  Liens métier↔domaine créés : {nb_liens_md}")
+        if metiers_sans_domaine:
+            log.warning(f"  Métiers sans domaine (hors scope) : {metiers_sans_domaine}")
 
         db.commit()
-        log.info(f"  Liens créés : {nb_liens}")
         log.info("=== Ingestion terminée avec succès ===")
 
     except Exception as e:

@@ -36,3 +36,4 @@ yarn-error.log*
 # Données et fichiers spécifiques au projet
 API_CONTRACT.md
 data
+docs/

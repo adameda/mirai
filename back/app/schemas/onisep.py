@@ -16,6 +16,7 @@ class DomaineOut(BaseModel):
     libelle: str
     slug: str
     nb_formations: int = 0
+    nb_metiers: int = 0
 
     model_config = {"from_attributes": True}
 

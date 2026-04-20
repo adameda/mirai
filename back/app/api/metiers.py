@@ -12,11 +12,22 @@ router = APIRouter(prefix="/metiers", tags=["metiers"])
 @router.get("", response_model=list[MetierShort])
 def list_metiers(
     formation_id: Optional[str] = Query(None, description="Métiers accessibles depuis cette formation"),
+    domaine_id: Optional[int] = Query(None, description="Métiers appartenant à ce domaine"),
     niveau_acces_min: Optional[str] = Query(None, description="Filtrer par niveau d'accès minimum"),
     db: Session = Depends(get_db),
 ):
-    """Liste les métiers avec filtres optionnels."""
-    return onisep_service.get_metiers(db, formation_id=formation_id, niveau_acces_min=niveau_acces_min)
+    """
+    Liste les métiers avec filtres optionnels.
+    - formation_id : métiers liés à une formation spécifique (via XML)
+    - domaine_id   : métiers liés à un domaine (via CSV Onisep)
+    Si les deux sont fournis, formation_id est prioritaire.
+    """
+    return onisep_service.get_metiers(
+        db,
+        formation_id=formation_id,
+        domaine_id=domaine_id,
+        niveau_acces_min=niveau_acces_min,
+    )
 
 
 @router.get("/{metier_id}", response_model=MetierDetail)

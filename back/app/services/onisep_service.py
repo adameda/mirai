@@ -20,7 +20,7 @@ from app.schemas.onisep import (
 )
 
 
-# ── Helpers de conversion ──────────────────────────────────────────────────
+# ── Helpers de conversion ─────────────────────────────────────────────────────
 
 def _type_formation(f: Formation) -> TypeFormationOut:
     return TypeFormationOut(
@@ -117,24 +117,36 @@ def _metier_to_detail(m: Metier) -> MetierDetail:
     )
 
 
-# ── Domaines ───────────────────────────────────────────────────────────────
+# ── Domaines ──────────────────────────────────────────────────────────────────
 
 def get_all_domaines(db: Session) -> list[DomaineOut]:
-    """Retourne tous les domaines avec le compte de formations associées."""
-    results = (
-        db.query(Domaine, func.count(Formation.id).label("nb_formations"))
+    """Retourne tous les domaines avec le compte de formations et de métiers associés."""
+    formation_counts = dict(
+        db.query(Domaine.id, func.count(Formation.id))
         .outerjoin(Domaine.formations)
         .group_by(Domaine.id)
-        .order_by(Domaine.libelle)
         .all()
     )
+    metier_counts = dict(
+        db.query(Domaine.id, func.count(Metier.id))
+        .outerjoin(Domaine.metiers)
+        .group_by(Domaine.id)
+        .all()
+    )
+    domaines = db.query(Domaine).order_by(Domaine.libelle).all()
     return [
-        DomaineOut(id=d.id, libelle=d.libelle, slug=d.slug, nb_formations=nb)
-        for d, nb in results
+        DomaineOut(
+            id=d.id,
+            libelle=d.libelle,
+            slug=d.slug,
+            nb_formations=formation_counts.get(d.id, 0),
+            nb_metiers=metier_counts.get(d.id, 0),
+        )
+        for d in domaines
     ]
 
 
-# ── Formations ─────────────────────────────────────────────────────────────
+# ── Formations ────────────────────────────────────────────────────────────────
 
 def get_formations(
     db: Session,
@@ -171,17 +183,26 @@ def get_formation_by_id(db: Session, formation_id: str) -> FormationDetail | Non
     return _formation_to_detail(f)
 
 
-# ── Métiers ────────────────────────────────────────────────────────────────
+# ── Métiers ───────────────────────────────────────────────────────────────────
 
 def get_metiers(
     db: Session,
     formation_id: str | None = None,
+    domaine_id: int | None = None,
     niveau_acces_min: str | None = None,
 ) -> list[MetierShort]:
+    """
+    Liste les métiers avec filtres optionnels.
+    formation_id et domaine_id sont exclusifs : si les deux sont fournis,
+    formation_id est prioritaire.
+    """
     query = db.query(Metier)
 
     if formation_id:
         query = query.join(Metier.formations).filter(Formation.id == formation_id)
+    elif domaine_id:
+        query = query.join(Metier.domaines).filter(Domaine.id == domaine_id)
+
     if niveau_acces_min:
         query = query.filter(Metier.niveau_acces_min == niveau_acces_min)
 

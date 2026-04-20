@@ -19,6 +19,10 @@ export async function getFormationsByDomaine(domaineId) {
   return api.get(`/formations?domaine_id=${domaineId}`);
 }
 
+export async function getAllFormations() {
+  return api.get('/formations');
+}
+
 export async function getFormationById(id) {
   return api.get(`/formations/${id}`);
 }
@@ -29,6 +33,14 @@ export async function getMetierById(id) {
 
 export async function getMetiersForFormation(formationId) {
   return api.get(`/metiers?formation_id=${formationId}`);
+}
+
+export async function getMetiersByDomaine(domaineId) {
+  return api.get(`/metiers?domaine_id=${domaineId}`);
+}
+
+export async function getAllMetiers() {
+  return api.get('/metiers');
 }
 
 export async function getFormationsForMetier(metierId) {

@@ -1,11 +1,12 @@
 """
 Modèles liés aux données Onisep.
 
-Domaine         : macro-domaine Mirai (ex: "Informatique & Tech")
+Domaine         : domaine Mirai (ex: "Informatique & Numérique") — 13 au total
 Formation       : fiche formation Onisep (identifiant = FOR.XXXX)
 Metier          : fiche métier Onisep (identifiant = MET.XXXX)
-FormationDomaine: relation N-N formation ↔ domaine
-FormationMetier : relation N-N formation ↔ métier (issu des fiches XML)
+FormationDomaine: relation N-N formation ↔ domaine (depuis sous_domaines_web XML)
+FormationMetier : relation N-N formation ↔ métier (depuis metiers_formation XML)
+MetierDomaine   : relation N-N métier ↔ domaine (depuis CSV métiers Onisep)
 """
 
 from sqlalchemy import Column, String, Text, Integer, Boolean, ForeignKey, Table, JSON
@@ -29,26 +30,35 @@ FormationMetier = Table(
     Column("metier_id", String, ForeignKey("metiers.id"), primary_key=True),
 )
 
+# Table d'association N-N : métier ↔ domaine
+MetierDomaine = Table(
+    "metier_domaine",
+    Base.metadata,
+    Column("metier_id", String, ForeignKey("metiers.id"), primary_key=True),
+    Column("domaine_id", Integer, ForeignKey("domaines.id"), primary_key=True),
+)
+
 
 class Domaine(Base):
     """
-    Macro-domaine Mirai. Liste fixe définie à l'ingestion via le mapping
-    sous_domaines_web Onisep → domaine Mirai.
+    Domaine Mirai. 13 domaines fixes définis à l'ingestion.
+    Chaque domaine couvre un ou plusieurs macro-domaines Onisep.
     """
     __tablename__ = "domaines"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     libelle = Column(String(120), nullable=False, unique=True)
-    # Slug URL-friendly, ex: "informatique-tech"
+    # Slug URL-friendly, ex: "informatique-numerique"
     slug = Column(String(80), nullable=False, unique=True)
 
     formations = relationship("Formation", secondary=FormationDomaine, back_populates="domaines")
+    metiers = relationship("Metier", secondary=MetierDomaine, back_populates="domaines")
 
 
 class Formation(Base):
     """
     Fiche formation Onisep. Seules les formations bac+2 à bac+5 avec
-    au moins un champ descriptif non vide sont ingérées (filtrage à l'étape 4).
+    au moins un champ descriptif non vide sont ingérées.
     """
     __tablename__ = "formations"
 
@@ -56,21 +66,19 @@ class Formation(Base):
     id = Column(String(20), primary_key=True)
 
     libelle_complet = Column(String(512), nullable=False)
-    # Libellé court du diplôme, ex: "science des données"
     libelle_generique = Column(String(256), nullable=True)
-    # Spécialité / parcours, ex: "exploration et modélisation statistique"
     libelle_specifique = Column(String(256), nullable=True)
 
     # Type de formation
-    type_sigle = Column(String(30), nullable=True)        # ex: "BUT"
-    type_libelle_court = Column(String(60), nullable=True) # ex: "BUT"
-    type_libelle = Column(String(120), nullable=True)      # ex: "bachelor universitaire de technologie"
+    type_sigle = Column(String(30), nullable=True)         # ex: "BUT"
+    type_libelle_court = Column(String(60), nullable=True)  # ex: "BUT"
+    type_libelle = Column(String(120), nullable=True)       # ex: "bachelor universitaire de technologie"
 
-    duree = Column(String(30), nullable=True)              # ex: "3 ans"
-    niveau_etudes = Column(String(30), nullable=True)      # ex: "bac + 3"
+    duree = Column(String(30), nullable=True)               # ex: "3 ans"
+    niveau_etudes = Column(String(30), nullable=True)       # ex: "bac + 3"
     niveau_certification = Column(String(20), nullable=True) # ex: "niveau 6"
 
-    # Champs texte issus du XML — nullable car souvent absents (cf. analyse : 36% / 30% / 15%)
+    # Champs texte issus du XML
     description_courte = Column(Text, nullable=True)
     acces = Column(Text, nullable=True)
     attendus = Column(Text, nullable=True)
@@ -87,7 +95,7 @@ class Formation(Base):
 class Metier(Base):
     """
     Fiche métier Onisep.
-    Les champs accroche et format_court sont présents sur 100% des fiches.
+    Les domaines sont issus du CSV Onisep (le XML métiers ne contient pas cette info).
     """
     __tablename__ = "metiers"
 
@@ -106,15 +114,14 @@ class Metier(Base):
     niveau_acces_min = Column(String(30), nullable=True)
     salaire_debutant = Column(Text, nullable=True)
 
-    # Champs texte — accroche et format_court à 100%, les autres à 80%
     accroche = Column(Text, nullable=True)
     format_court = Column(Text, nullable=True)
     competences = Column(Text, nullable=True)
     nature_travail = Column(Text, nullable=True)
     condition_travail = Column(Text, nullable=True)
 
-    # True si le métier est présent dans plusieurs secteurs (metier_transverse=oui)
     est_transverse = Column(Boolean, default=False, nullable=False)
 
+    domaines = relationship("Domaine", secondary=MetierDomaine, back_populates="metiers")
     formations = relationship("Formation", secondary=FormationMetier, back_populates="metiers")
     favoris = relationship("Favori", back_populates="metier")

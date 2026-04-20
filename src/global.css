@@ -18,3 +18,41 @@ input {
 * {
   box-sizing: border-box;
 }
+
+.mirai-chatbot-pulse {
+  animation: mirai-chatbot-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes mirai-chatbot-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 6px 20px rgba(249, 162, 59, 0.45);
+  }
+
+  50% {
+    transform: scale(1.08);
+    box-shadow: 0 10px 28px rgba(249, 162, 59, 0.62);
+  }
+}
+
+/* ── Exploration cards ────────────────────────────────────────────────────── */
+
+.mirai-card {
+  transition: box-shadow 0.18s, transform 0.18s, opacity 0.22s, border-color 0.18s !important;
+}
+
+.mirai-card:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 10px 28px rgba(15, 31, 61, 0.10) !important;
+}
+
+/* Non-selected items in an active path — recede visually */
+.mirai-card-dimmed {
+  opacity: 0.38;
+}
+
+.mirai-card-dimmed:hover {
+  opacity: 0.72;
+  transform: translateY(-1px) !important;
+}

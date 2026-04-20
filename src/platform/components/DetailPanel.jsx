@@ -1,136 +1,88 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import Badge from "./Badge";
 import { T, grad, gradSoft } from "../constants/theme";
 import { getFormationById, getMetierById, getMetiersForFormation, getFormationsForMetier } from "../services/explorationService";
 
+const shortSalary = (value) => {
+  const matches = `${value || ""}`.match(/\d{3,4}/g);
+  if (matches && matches.length >= 2) return `${matches[0]}–${matches[1]} € brut/mois`;
+  if (matches && matches.length === 1) return `À partir de ${matches[0]} € brut/mois`;
+  return value || "Rémunération variable";
+};
+
 export default function DetailPanel({ item, onClose, onSave, onRemove, savedItems, onAskMirai }) {
-  if (!item) return null;
-
-  const saved = savedItems.some(
-    (i) => i.type === item.type && (item.refId ? i.refId === item.refId : i.label === item.label)
-  );
-  const identifier = item.refId || item.label;
-
-  const [data,     setData]     = useState(null);   // formation ou metier (détail)
-  const [related,  setRelated]  = useState([]);      // métiers (pour formation) ou formations (pour métier)
+  const [data, setData] = useState(null);
+  const [related, setRelated] = useState([]);
 
   useEffect(() => {
+    if (!item) {
+      setData(null);
+      setRelated([]);
+      return;
+    }
+
     setData(null);
     setRelated([]);
+
     if (item.type === "formation") {
-      getFormationById(item.refId).then(f => {
-        setData(f);
-        getMetiersForFormation(item.refId).then(setRelated);
+      getFormationById(item.refId).then((formation) => {
+        setData(formation);
+        getMetiersForFormation(item.refId).then((list) => setRelated(list.slice(0, 6)));
       });
     } else {
-      getMetierById(item.refId).then(m => {
-        setData(m);
-        getFormationsForMetier(item.refId).then(setRelated);
+      getMetierById(item.refId).then((metier) => {
+        setData(metier);
+        getFormationsForMetier(item.refId).then((list) => setRelated(list.slice(0, 6)));
       });
     }
-  }, [item.refId, item.type]);
+  }, [item?.refId, item?.type]);
 
-  // Parent pour le bouton Sauvegarder
-  let parentForSave  = item.parent  || null;
-  let parentRefId    = item.parentRefId || null;
+  if (!item) return null;
 
-  if (item.type === "formation" && data) {
-    parentForSave = data.domaines?.[0]?.libelle || item.domaine || null;
-    parentRefId   = data.domaines?.[0]?.id ? String(data.domaines[0].id) : item.parentRefId || null;
-  }
-  if (item.type === "metier" && data) {
-    parentForSave = item.formation || item.parent || null;
-    parentRefId   = item.formationId || item.parentRefId || null;
-  }
+  const saved = savedItems.some((entry) => entry.type === item.type && (item.refId ? entry.refId === item.refId : entry.label === item.label));
+  const identifier = item.refId || item.label;
 
-  // ── Contenu formation ──────────────────────────────────────────────────
-  let metaRow, bodyContent;
+  const handleSave = () => {
+    if (item.type === "formation") {
+      const parentForSave = data?.domaines?.[0]?.libelle || item.domaine || item.parent || null;
+      const parentRefId = data?.domaines?.[0]?.id ? String(data.domaines[0].id) : item.parentRefId || null;
+      onSave(item.type, item.label, parentForSave, identifier, parentRefId);
+      return;
+    }
+
+    const parentForSave = item.formation || data?.formations?.[0]?.libelle_complet || item.parent || null;
+    const parentRefId = item.formationId || data?.formations?.[0]?.id || item.parentRefId || null;
+    onSave(item.type, item.label, parentForSave, identifier, parentRefId);
+  };
+
+  let metaRow = null;
+  let relatedTitle = null;
 
   if (item.type === "formation") {
     metaRow = (
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
-        {data?.type?.sigle         && <Badge label={data.type.sigle}          color={T.muted}    bg={T.bg}        />}
-        {data?.duree               && <Badge label={data.duree}               color={T.orange}   bg={gradSoft}    />}
-        {data?.niveau_etudes       && <Badge label={data.niveau_etudes}       color={T.success}  bg="#2EC99A14"   />}
-        {(data?.domaines?.[0]?.libelle || item.domaine) &&
-          <Badge label={data?.domaines?.[0]?.libelle || item.domaine} color={T.muted} bg={T.border} />}
+        {data?.type_formation?.sigle && <Badge label={data.type_formation.sigle} color={T.muted} bg={T.bg} />}
+        {data?.duree && <Badge label={data.duree} color={T.orange} bg={gradSoft} />}
+        {data?.niveau_etudes && <Badge label={data.niveau_etudes} color={T.success} bg="#2EC99A14" />}
+        {data?.domaines?.[0]?.libelle && <Badge label={data.domaines[0].libelle} color={T.muted} bg={T.border} />}
       </div>
     );
-
-    bodyContent = (
-      <>
-        <p style={{ margin: "0 0 18px", fontSize: 14, color: T.muted, lineHeight: 1.75 }}>
-          {data?.description_courte || `Formation ${item.label}${item.domaine ? " dans le domaine " + item.domaine : ""}.`}
-        </p>
-        {data?.acces && (
-          <div style={{ padding: "14px 16px", borderRadius: 14, background: T.bg, border: `1px solid ${T.border}`, marginBottom: 16 }}>
-            <p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 700, color: T.text }}>Accès</p>
-            <p style={{ margin: 0, fontSize: 13, color: T.muted, lineHeight: 1.65 }}>{data.acces}</p>
-          </div>
-        )}
-        {related.length > 0 && (
-          <div style={{ marginBottom: 20 }}>
-            <p style={{ margin: "0 0 10px", fontSize: 12, fontWeight: 700, color: T.text }}>Métiers associés</p>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
-              {related.map((m) => (
-                <span key={m.id} style={{ padding: "5px 12px", borderRadius: 99, background: gradSoft, border: "1px solid #F9A23B20", fontSize: 12, color: T.coral, fontWeight: 600 }}>
-                  {m.nom}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-      </>
-    );
+    relatedTitle = "Métiers associés";
   } else {
-    // ── Contenu métier ─────────────────────────────────────────────────
-    const secteur = data?.secteurs_activite?.[0]?.libelle;
-
     metaRow = (
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
-        {secteur                    && <Badge label={secteur}                   color={T.muted}   bg={T.bg}      />}
-        {data?.niveau_acces_min    && <Badge label={data.niveau_acces_min}    color={T.success} bg="#2EC99A14" />}
-        {data?.salaire_debutant    && <Badge label={data.salaire_debutant}    color={T.orange}  bg={gradSoft}  />}
+        {data?.secteurs_activite?.[0]?.libelle && <Badge label={data.secteurs_activite[0].libelle} color={T.muted} bg={T.bg} />}
+        {data?.niveau_acces_min && <Badge label={data.niveau_acces_min} color={T.success} bg="#2EC99A14" />}
+        {data?.salaire_debutant && <Badge label={shortSalary(data.salaire_debutant)} color={T.orange} bg={gradSoft} />}
       </div>
     );
-
-    bodyContent = (
-      <>
-        <p style={{ margin: "0 0 16px", fontSize: 14, color: T.muted, lineHeight: 1.75 }}>
-          {data?.accroche || `Fiche métier ${item.label}.`}
-        </p>
-        {data?.format_court && (
-          <div style={{ padding: "14px 16px", borderRadius: 14, background: T.bg, border: `1px solid ${T.border}`, marginBottom: 16 }}>
-            <p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 700, color: T.text }}>En bref</p>
-            <p style={{ margin: 0, fontSize: 13, color: T.muted, lineHeight: 1.65 }}>{data.format_court}</p>
-          </div>
-        )}
-        {data?.competences && (
-          <div style={{ marginBottom: 16 }}>
-            <p style={{ margin: "0 0 10px", fontSize: 12, fontWeight: 700, color: T.text }}>Compétences clés</p>
-            <p style={{ margin: 0, fontSize: 13, color: T.muted, lineHeight: 1.65 }}>{data.competences}</p>
-          </div>
-        )}
-        {related.length > 0 && (
-          <div style={{ padding: "14px 16px", borderRadius: 14, background: T.bg, border: `1px solid ${T.border}`, marginBottom: 4 }}>
-            <p style={{ margin: "0 0 8px", fontSize: 12, fontWeight: 700, color: T.text }}>Formations associées</p>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
-              {related.map((f) => (
-                <span key={f.id} style={{ padding: "5px 12px", borderRadius: 99, background: gradSoft, border: "1px solid #F9A23B20", fontSize: 12, color: T.coral, fontWeight: 600 }}>
-                  {f.libelle_complet}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-      </>
-    );
+    relatedTitle = "Formations associées";
   }
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,31,61,0.5)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }} onClick={onClose}>
       <div
-        style={{ background: T.white, borderRadius: 24, padding: "36px 40px", width: "100%", maxWidth: 520, position: "relative", boxShadow: "0 24px 80px rgba(15,31,61,0.25)", maxHeight: "85vh", overflowY: "auto", fontFamily: "'DM Sans',sans-serif" }}
+        style={{ background: T.white, borderRadius: 24, padding: "32px 34px", width: "100%", maxWidth: 500, position: "relative", boxShadow: "0 24px 80px rgba(15,31,61,0.25)", maxHeight: "85vh", overflowY: "auto", fontFamily: "'DM Sans',sans-serif" }}
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -139,28 +91,100 @@ export default function DetailPanel({ item, onClose, onSave, onRemove, savedItem
         >
           ✕
         </button>
+
         <div style={{ marginBottom: 16 }}>
           <p style={{ margin: "0 0 6px", fontSize: 11, fontWeight: 700, color: T.muted, letterSpacing: "0.1em", textTransform: "uppercase" }}>
             {item.type === "formation" ? "Formation" : "Métier"}
           </p>
           <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: T.text, letterSpacing: "-0.03em" }}>{item.label}</h2>
         </div>
+
         {!data ? (
           <p style={{ margin: "24px 0", fontSize: 13, color: T.muted, textAlign: "center" }}>Chargement…</p>
         ) : (
           <>
             {metaRow}
-            {bodyContent}
+
+            {/* Description courte (formation) */}
+            {item.type === "formation" && data?.description_courte && (
+              <div style={{ marginBottom: 18 }}>
+                <p style={{ margin: "0 0 6px", fontSize: 12, fontWeight: 700, color: T.text }}>Présentation</p>
+                <p style={{ margin: 0, fontSize: 12, color: T.muted, lineHeight: 1.65 }}>{data.description_courte}</p>
+              </div>
+            )}
+
+            {/* Lien Onisep pour les formations sans description (ingénieur, commerce…) */}
+            {item.type === "formation" && !data?.description_courte && !data?.acces && data?.url && (
+              <div style={{ marginBottom: 18 }}>
+                <p style={{ margin: "0 0 8px", fontSize: 12, fontWeight: 700, color: T.text }}>Fiche complète</p>
+                <a
+                  href={data.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 14px", borderRadius: 12, border: `1px solid ${T.border}`, background: T.bg, textDecoration: "none", color: T.text, fontSize: 12, fontWeight: 600 }}
+                >
+                  <span>Voir la fiche sur Onisep</span>
+                  <span style={{ color: T.muted, fontSize: 11 }}>↗</span>
+                </a>
+              </div>
+            )}
+
+            {/* Accroche (métier) */}
+            {item.type === "metier" && data?.accroche && (
+              <div style={{ marginBottom: 18 }}>
+                <p style={{ margin: "0 0 6px", fontSize: 12, fontWeight: 700, color: T.text }}>En bref</p>
+                <p style={{ margin: 0, fontSize: 12, color: T.muted, lineHeight: 1.65 }}>{data.accroche}</p>
+              </div>
+            )}
+
+            {/* Related items */}
+            {related.length > 0 && (
+              <div style={{ marginBottom: 18 }}>
+                <p style={{ margin: "0 0 10px", fontSize: 12, fontWeight: 700, color: T.text }}>{relatedTitle}</p>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                  {related.map((entry) => (
+                    <span key={entry.id} style={{ padding: "5px 12px", borderRadius: 99, background: gradSoft, border: "1px solid #F9A23B20", fontSize: 12, color: T.coral, fontWeight: 600 }}>
+                      {item.type === "formation" ? entry.nom : entry.libelle_complet}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Poursuites d'études (formation only) */}
+            {item.type === "formation" && data?.poursuite_etudes?.length > 0 && (
+              <div style={{ marginBottom: 18 }}>
+                <p style={{ margin: "0 0 10px", fontSize: 12, fontWeight: 700, color: T.text }}>Poursuites d'études possibles</p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {data.poursuite_etudes.map((p) => (
+                    <a
+                      key={p.id}
+                      href={`https://www.onisep.fr/http/redirection/formation/slug/${p.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "9px 12px", borderRadius: 10, border: `1px solid ${T.border}`, background: T.bg, textDecoration: "none", color: T.text, fontSize: 12, fontWeight: 600, transition: "border-color 0.15s" }}
+                    >
+                      <span style={{ flex: 1, lineHeight: 1.35 }}>{p.libelle}</span>
+                      <span style={{ color: T.muted, fontSize: 10, flexShrink: 0 }}>↗ Onisep</span>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         )}
+
         <div style={{ paddingTop: 16, borderTop: `1px solid ${T.border}` }}>
           {onAskMirai && (
             <button
               type="button"
-              onClick={() => { onClose(); onAskMirai(item); }}
+              onClick={() => {
+                onClose();
+                onAskMirai(item);
+              }}
               style={{ width: "100%", marginBottom: 10, padding: "12px 16px", borderRadius: 13, border: "1.5px solid #F9A23B55", background: gradSoft, color: T.orange, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
             >
-              En savoir plus — demander à MIRAI
+              Demander à MIRAI
             </button>
           )}
           <div style={{ display: "flex", gap: 10 }}>
@@ -173,7 +197,7 @@ export default function DetailPanel({ item, onClose, onSave, onRemove, savedItem
             </button>
             <button
               type="button"
-              onClick={() => saved ? onRemove(item.type, identifier) : onSave(item.type, item.label, parentForSave, identifier, parentRefId)}
+              onClick={() => (saved ? onRemove(item.type, identifier) : handleSave())}
               style={{ flex: 2, padding: "12px", borderRadius: 13, border: "none", background: saved ? T.border : grad, color: saved ? T.muted : "white", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: saved ? "none" : "0 6px 20px rgba(249,162,59,0.3)", transition: "all 0.2s" }}
             >
               {saved ? "✓ Sauvegardé" : "Sauvegarder en favori"}
