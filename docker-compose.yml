@@ -1,0 +1,42 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mirai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mirai}
+      POSTGRES_DB: ${POSTGRES_DB:-mirai}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mirai} -d ${POSTGRES_DB:-mirai}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  back:
+    build: ./back
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-mirai}:${POSTGRES_PASSWORD:-mirai}@postgres:5432/${POSTGRES_DB:-mirai}
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+    volumes:
+      - ./data:/data:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"   # pratique en dev — retirer en prod si le back n'est pas exposé directement
+
+  front:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      - back
+
+volumes:
+  postgres_data:

@@ -12,6 +12,7 @@ __pycache__/
 
 # Environnements et secrets
 back/.env
+.env
 
 # Fichiers système
 .DS_Store

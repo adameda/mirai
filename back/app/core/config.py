@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7   # 7 jours
     GEMINI_API_KEY: str = ""
+    # Origines CORS autorisées, séparées par des virgules
+    CORS_ORIGINS: str = "http://localhost:5173,http://localhost:8080"
 
     model_config = {"env_file": ".env"}
 

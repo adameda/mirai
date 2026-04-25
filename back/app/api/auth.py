@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.limiter import limiter
 from app.schemas.auth import TokenOut
 from app.schemas.user import SignupIn, LoginIn
 from app.services import user_service
@@ -10,7 +11,8 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/signup", response_model=TokenOut, status_code=201)
-def signup(data: SignupIn, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def signup(request: Request, data: SignupIn, db: Session = Depends(get_db)):
     """
     Créer un compte.
     - role='eleve' : class_code requis (doit exister)
@@ -20,6 +22,7 @@ def signup(data: SignupIn, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenOut)
-def login(data: LoginIn, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def login(request: Request, data: LoginIn, db: Session = Depends(get_db)):
     """Se connecter avec prenom + role + class_code."""
     return user_service.login(db, data)

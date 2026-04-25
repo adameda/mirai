@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 from typing import Optional
 
 from app.core.database import get_db
+from app.core.limiter import limiter
 from app.schemas.onisep import FormationShort, FormationDetail
 from app.services import onisep_service
 
@@ -10,7 +11,9 @@ router = APIRouter(prefix="/formations", tags=["formations"])
 
 
 @router.get("", response_model=list[FormationShort])
+@limiter.limit("60/minute")
 def list_formations(
+    request: Request,
     domaine_id: Optional[int] = Query(None, description="Filtrer par domaine"),
     type: Optional[str] = Query(None, description="Filtrer par type (BTS, BUT, master...)"),
     niveau_etudes: Optional[str] = Query(None, description="Filtrer par niveau (bac + 2, bac + 3...)"),
@@ -21,7 +24,8 @@ def list_formations(
 
 
 @router.get("/{formation_id}", response_model=FormationDetail)
-def get_formation(formation_id: str, db: Session = Depends(get_db)):
+@limiter.limit("60/minute")
+def get_formation(request: Request, formation_id: str, db: Session = Depends(get_db)):
     """Détail complet d'une formation (pour le panneau de détail)."""
     formation = onisep_service.get_formation_by_id(db, formation_id)
     if not formation:
