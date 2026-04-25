@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { T, grad, gradSoft } from "../constants/theme";
 import { useAppState } from "../hooks/useAppState";
 
-const BASE = "http://localhost:8000/api/v1";
+const BASE = "/api/v1";
 const STORAGE_KEY = "mirai_chat_histories";
 
 // ── Helpers localStorage ──────────────────────────────────────────────────────

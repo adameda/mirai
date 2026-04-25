@@ -7,20 +7,28 @@ import { useAppState } from "../hooks/useAppState";
 
 export default function Auth({ mode, onComplete, onToggle }) {
   const { authError, setAuthError } = useAppState();
-  const [prenom, setPrenom]         = useState("");
-  const [role,   setRole]           = useState("eleve");
-  const [classCode, setClassCode]   = useState("");
+
+  const [role,       setRole]       = useState("eleve");
+  const [nom,        setNom]        = useState("");
+  const [prenom,     setPrenom]     = useState("");
+  const [email,      setEmail]      = useState("");
+  const [password,   setPassword]   = useState("");
+  const [inviteCode, setInviteCode] = useState("");
+  const [classCode,  setClassCode]  = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const isSignup = mode === "signup";
-  const canSubmit = prenom && (role !== "eleve" || classCode);
+
+  const canSubmit = isSignup
+    ? nom && prenom && email && password && inviteCode && (role !== "eleve" || classCode)
+    : email && password;
 
   async function handleSubmit() {
     if (!canSubmit || submitting) return;
     setAuthError(null);
     setSubmitting(true);
     try {
-      await onComplete({ prenom, role, classCode, isSignup });
+      await onComplete({ nom, prenom, email, password, role, inviteCode, classCode, isSignup });
     } catch (e) {
       setAuthError(e.message || "Erreur de connexion");
     } finally {
@@ -49,37 +57,62 @@ export default function Auth({ mode, onComplete, onToggle }) {
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 20 }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: T.text, fontFamily: "'DM Sans',sans-serif" }}>Tu es</label>
-                <div style={{ display: "flex", gap: 10 }}>
-                  {[{ id: "eleve", label: "Élève", sym: "◎" }, { id: "prof", label: "Professeur", sym: "◐" }].map((r) => (
-                    <div
-                      key={r.id}
-                      onClick={() => setRole(r.id)}
-                      style={{
-                        flex: 1, padding: "12px 14px", borderRadius: 12, cursor: "pointer",
-                        border: `2px solid ${role === r.id ? T.orange : T.border}`,
-                        background: role === r.id ? gradSoft : T.bg,
-                        display: "flex", alignItems: "center", gap: 8, transition: "all 0.2s",
-                      }}
-                    >
-                      <span style={{ fontSize: 14, color: role === r.id ? T.orange : T.muted }}>{r.sym}</span>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: role === r.id ? T.text : T.muted, fontFamily: "'DM Sans',sans-serif" }}>{r.label}</span>
-                      {role === r.id && <span style={{ marginLeft: "auto", fontSize: 11, color: T.orange }}>✓</span>}
+
+              {isSignup && (
+                <>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: T.text, fontFamily: "'DM Sans',sans-serif" }}>Tu es</label>
+                    <div style={{ display: "flex", gap: 10 }}>
+                      {[{ id: "eleve", label: "Élève", sym: "◎" }, { id: "prof", label: "Professeur", sym: "◐" }].map((r) => (
+                        <div
+                          key={r.id}
+                          onClick={() => setRole(r.id)}
+                          style={{
+                            flex: 1, padding: "12px 14px", borderRadius: 12, cursor: "pointer",
+                            border: `2px solid ${role === r.id ? T.orange : T.border}`,
+                            background: role === r.id ? gradSoft : T.bg,
+                            display: "flex", alignItems: "center", gap: 8, transition: "all 0.2s",
+                          }}
+                        >
+                          <span style={{ fontSize: 14, color: role === r.id ? T.orange : T.muted }}>{r.sym}</span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: role === r.id ? T.text : T.muted, fontFamily: "'DM Sans',sans-serif" }}>{r.label}</span>
+                          {role === r.id && <span style={{ marginLeft: "auto", fontSize: 11, color: T.orange }}>✓</span>}
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </div>
+                  </div>
 
-              <Input label="Prénom" placeholder="Léa" value={prenom} onChange={(e) => setPrenom(e.target.value)} />
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <div style={{ flex: 1 }}>
+                      <Input label="Nom" placeholder="Dupont" value={nom} onChange={(e) => setNom(e.target.value)} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <Input label="Prénom" placeholder="Léa" value={prenom} onChange={(e) => setPrenom(e.target.value)} />
+                    </div>
+                  </div>
+                </>
+              )}
 
-              {role === "eleve" && (
-                <Input
-                  label="Code classe (obligatoire)"
-                  placeholder="ex : ABC123"
-                  value={classCode}
-                  onChange={(e) => setClassCode(e.target.value)}
-                />
+              <Input label="Adresse email" placeholder="lea@exemple.fr" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <Input label="Mot de passe" placeholder="••••••••" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+
+              {isSignup && (
+                <>
+                  <Input
+                    label="Code d'invitation"
+                    placeholder="Fourni par ton établissement"
+                    value={inviteCode}
+                    onChange={(e) => setInviteCode(e.target.value)}
+                  />
+                  {role === "eleve" && (
+                    <Input
+                      label="Code classe"
+                      placeholder="ex : ABC123"
+                      value={classCode}
+                      onChange={(e) => setClassCode(e.target.value)}
+                    />
+                  )}
+                </>
               )}
 
               {authError && (

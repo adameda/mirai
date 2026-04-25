@@ -1,22 +1,44 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional
 
 
 class SignupIn(BaseModel):
+    nom: str
     prenom: str
-    role: str           # "eleve" | "prof"
-    class_code: Optional[str] = None   # requis pour role="eleve", ignoré pour "prof"
+    email: str
+    password: str
+    role: str
+    class_code: Optional[str] = None
+    invite_code: str
+
+    @field_validator("email")
+    @classmethod
+    def email_lowercase(cls, v: str) -> str:
+        return v.strip().lower()
+
+    @field_validator("role")
+    @classmethod
+    def role_valid(cls, v: str) -> str:
+        if v not in ("eleve", "prof"):
+            raise ValueError("role doit être 'eleve' ou 'prof'")
+        return v
 
 
 class LoginIn(BaseModel):
-    prenom: str
-    role: str
-    class_code: Optional[str] = None
+    email: str
+    password: str
+
+    @field_validator("email")
+    @classmethod
+    def email_lowercase(cls, v: str) -> str:
+        return v.strip().lower()
 
 
 class UserOut(BaseModel):
     id: int
+    nom: str
     prenom: str
+    email: str
     role: str
     class_code: Optional[str] = None
     onboarded: bool

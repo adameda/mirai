@@ -81,7 +81,7 @@ export function AppProvider({ children }) {
     async function restore() {
       try {
         const me = await authService.getMe();
-        setUser({ prenom: me.prenom, role: me.role, classCode: me.class_code });
+        setUser({ nom: me.nom, prenom: me.prenom, email: me.email, role: me.role, classCode: me.class_code });
         setOnboarded(me.onboarded);
 
         // Réponses onboarding stockées localement
@@ -116,15 +116,15 @@ export function AppProvider({ children }) {
   }, []);
 
   // ── Auth ───────────────────────────────────────────────────────────────
-  const completeAuth = useCallback(async ({ prenom, role, classCode, isSignup }) => {
+  const completeAuth = useCallback(async ({ nom, prenom, email, password, role, inviteCode, classCode, isSignup }) => {
     setAuthError(null);
     const result = isSignup
-      ? await authService.signup(prenom, role, classCode)
-      : await authService.login(prenom, role, classCode);
+      ? await authService.signup(nom, prenom, email, password, role, inviteCode, classCode)
+      : await authService.login(email, password);
 
     localStorage.setItem('mirai_token', result.access_token);
     const me = result.user;
-    setUser({ prenom: me.prenom, role: me.role, classCode: me.class_code });
+    setUser({ nom: me.nom, prenom: me.prenom, email: me.email, role: me.role, classCode: me.class_code });
     setOnboarded(me.onboarded);
 
     if (me.role === 'eleve') {

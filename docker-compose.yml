@@ -22,6 +22,7 @@ services:
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+      INVITE_CODE: ${INVITE_CODE:-mirai2026}
     volumes:
       - ./data:/data:ro
     depends_on:

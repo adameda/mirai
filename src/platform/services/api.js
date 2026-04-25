@@ -1,7 +1,7 @@
 // Client HTTP minimal — wrappé autour de fetch.
 // Lit le JWT dans localStorage et l'injecte dans chaque requête.
 
-const BASE = 'http://localhost:8000/api/v1';
+const BASE = '/api/v1';
 
 function getToken() {
   return localStorage.getItem('mirai_token');
