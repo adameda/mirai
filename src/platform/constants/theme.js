@@ -17,10 +17,11 @@ export const grad = "linear-gradient(135deg, #F4736A 0%, #F9A23B 55%, #F9C84A 10
 export const gradSoft = "linear-gradient(135deg, #F4736A10 0%, #F9C84A10 100%)";
 
 export const NAV_ELEVE = [
-  { id: "dashboard", sym: "⊞", label: "Tableau de bord" },
+  { id: "dashboard",   sym: "⊞", label: "Tableau de bord" },
   { id: "exploration", sym: "◉", label: "Exploration" },
-  { id: "chatbot", sym: "◈", label: "Chatbot" },
-  { id: "favoris", sym: "◇", label: "Favoris" },
+  { id: "parcoursup",  sym: "◎", label: "Parcoursup" },
+  { id: "chatbot",     sym: "◈", label: "Chatbot" },
+  { id: "favoris",     sym: "◇", label: "Favoris" },
 ];
 
 export const NAV_PROF = [

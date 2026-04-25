@@ -39,24 +39,8 @@ class FormationShort(BaseModel):
     niveau_etudes: Optional[str] = None
     domaines: list[DomaineOut] = []
     description_courte: Optional[str] = None
-
-    model_config = {"from_attributes": True}
-
-
-class MetierRefOut(BaseModel):
-    """Référence légère d'un métier, utilisée dans FormationDetail."""
-    id: str
-    nom: str
-    libelle_feminin: Optional[str] = None
-    libelle_masculin: Optional[str] = None
-
-    model_config = {"from_attributes": True}
-
-
-class FormationRefOut(BaseModel):
-    """Référence légère d'une formation, utilisée dans MetierDetail."""
-    id: str
-    libelle_complet: str
+    acces_postbac_direct: bool = False
+    url: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -76,7 +60,6 @@ class FormationDetail(BaseModel):
     acces: Optional[str] = None
     attendus: Optional[str] = None
     poursuite_etudes: Optional[list] = None
-    metiers: list[MetierRefOut] = []
     url: Optional[str] = None
 
     model_config = {"from_attributes": True}
@@ -119,6 +102,5 @@ class MetierDetail(BaseModel):
     competences: Optional[str] = None
     nature_travail: Optional[str] = None
     condition_travail: Optional[str] = None
-    formations: list[FormationRefOut] = []
 
     model_config = {"from_attributes": True}

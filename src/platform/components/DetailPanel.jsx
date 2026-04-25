@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import Badge from "./Badge";
 import { T, grad, gradSoft } from "../constants/theme";
-import { getFormationById, getMetierById, getMetiersForFormation, getFormationsForMetier } from "../services/explorationService";
+
+import { getFormationById, getMetierById } from "../services/explorationService";
 
 const shortSalary = (value) => {
   const matches = `${value || ""}`.match(/\d{3,4}/g);
@@ -12,29 +13,14 @@ const shortSalary = (value) => {
 
 export default function DetailPanel({ item, onClose, onSave, onRemove, savedItems, onAskMirai }) {
   const [data, setData] = useState(null);
-  const [related, setRelated] = useState([]);
 
   useEffect(() => {
-    if (!item) {
-      setData(null);
-      setRelated([]);
-      return;
-    }
-
+    if (!item) { setData(null); return; }
     setData(null);
-    setRelated([]);
-
-    if (item.type === "formation") {
-      getFormationById(item.refId).then((formation) => {
-        setData(formation);
-        getMetiersForFormation(item.refId).then((list) => setRelated(list.slice(0, 6)));
-      });
-    } else {
-      getMetierById(item.refId).then((metier) => {
-        setData(metier);
-        getFormationsForMetier(item.refId).then((list) => setRelated(list.slice(0, 6)));
-      });
-    }
+    const fetch = item.type === "formation"
+      ? getFormationById(item.refId)
+      : getMetierById(item.refId);
+    fetch.then(setData);
   }, [item?.refId, item?.type]);
 
   if (!item) return null;
@@ -50,13 +36,12 @@ export default function DetailPanel({ item, onClose, onSave, onRemove, savedItem
       return;
     }
 
-    const parentForSave = item.formation || data?.formations?.[0]?.libelle_complet || item.parent || null;
-    const parentRefId = item.formationId || data?.formations?.[0]?.id || item.parentRefId || null;
+    const parentForSave = item.formation || item.parent || null;
+    const parentRefId = item.formationId || item.parentRefId || null;
     onSave(item.type, item.label, parentForSave, identifier, parentRefId);
   };
 
   let metaRow = null;
-  let relatedTitle = null;
 
   if (item.type === "formation") {
     metaRow = (
@@ -67,7 +52,6 @@ export default function DetailPanel({ item, onClose, onSave, onRemove, savedItem
         {data?.domaines?.[0]?.libelle && <Badge label={data.domaines[0].libelle} color={T.muted} bg={T.border} />}
       </div>
     );
-    relatedTitle = "Métiers associés";
   } else {
     metaRow = (
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
@@ -76,7 +60,6 @@ export default function DetailPanel({ item, onClose, onSave, onRemove, savedItem
         {data?.salaire_debutant && <Badge label={shortSalary(data.salaire_debutant)} color={T.orange} bg={gradSoft} />}
       </div>
     );
-    relatedTitle = "Formations associées";
   }
 
   return (
@@ -137,20 +120,6 @@ export default function DetailPanel({ item, onClose, onSave, onRemove, savedItem
               </div>
             )}
 
-            {/* Related items */}
-            {related.length > 0 && (
-              <div style={{ marginBottom: 18 }}>
-                <p style={{ margin: "0 0 10px", fontSize: 12, fontWeight: 700, color: T.text }}>{relatedTitle}</p>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
-                  {related.map((entry) => (
-                    <span key={entry.id} style={{ padding: "5px 12px", borderRadius: 99, background: gradSoft, border: "1px solid #F9A23B20", fontSize: 12, color: T.coral, fontWeight: 600 }}>
-                      {item.type === "formation" ? entry.nom : entry.libelle_complet}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {/* Poursuites d'études (formation only) */}
             {item.type === "formation" && data?.poursuite_etudes?.length > 0 && (
               <div style={{ marginBottom: 18 }}>
@@ -198,7 +167,7 @@ export default function DetailPanel({ item, onClose, onSave, onRemove, savedItem
             <button
               type="button"
               onClick={() => (saved ? onRemove(item.type, identifier) : handleSave())}
-              style={{ flex: 2, padding: "12px", borderRadius: 13, border: "none", background: saved ? T.border : grad, color: saved ? T.muted : "white", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: saved ? "none" : "0 6px 20px rgba(249,162,59,0.3)", transition: "all 0.2s" }}
+              style={{ flex: 2, padding: "12px", borderRadius: 13, border: saved ? "1.5px solid #F9A23B40" : "none", background: saved ? gradSoft : grad, color: saved ? T.orange : "white", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", boxShadow: saved ? "none" : "0 6px 20px rgba(249,162,59,0.3)", transition: "all 0.2s" }}
             >
               {saved ? "✓ Sauvegardé" : "Sauvegarder en favori"}
             </button>

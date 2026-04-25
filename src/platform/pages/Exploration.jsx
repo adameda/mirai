@@ -1,644 +1,548 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import DetailPanel from "../components/DetailPanel";
+import { useEffect, useMemo, useState } from "react";
 import SaveBtn from "../components/SaveBtn";
 import {
   getAllDomaines,
-  getAllFormations,
-  getAllMetiers,
   getFormationsByDomaine,
-  getMetiersForFormation,
+  getMetiersByDomaine,
   getSuggestedDomaines,
 } from "../services/explorationService";
 import { T, grad, gradSoft } from "../constants/theme";
 import { useAppState } from "../hooks/useAppState";
 
-// ── Domain metadata ───────────────────────────────────────────────────────────
+// ── Constantes ───────────────────────────────────────────────────────────────
 
 const DOMAIN_ICONS = {
-  "Informatique & Numérique": "💻",
-  "Ingénierie & Industrie": "⚙️",
-  "Énergie & Environnement": "🌱",
-  "Commerce & Marketing": "📈",
-  "Gestion & Finance": "💼",
-  "Communication & Médias": "📡",
-  "Arts & Design": "🎨",
-  "Santé & Social": "🏥",
-  "Sciences": "🔬",
-  "Droit": "⚖️",
+  "Informatique & Numérique":    "💻",
+  "Ingénierie & Industrie":      "⚙️",
+  "Énergie & Environnement":     "🌱",
+  "Commerce & Marketing":        "📈",
+  "Gestion & Finance":           "💼",
+  "Communication & Médias":      "📡",
+  "Arts & Design":               "🎨",
+  "Santé & Social":              "🏥",
+  "Sciences":                    "🔬",
+  "Droit":                       "⚖️",
   "Sciences Humaines & Langues": "📚",
-  "BTP & Architecture": "🏗️",
-  "Hôtellerie & Tourisme": "✈️",
+  "BTP & Architecture":          "🏗️",
+  "Hôtellerie & Tourisme":       "✈️",
 };
 
-// Accent color per column (for the top progress bar)
-const COL_ACCENT = {
+const C = {
   domaines:   "#1A2F5A",
   formations: "#F9A23B",
   metiers:    "#2EC99A",
 };
 
-const FORMATION_FAMILIES = ["BTS", "BUT", "Prépa", "Licence", "École", "Autre"];
-const POURSUITE_FAMILIES = new Set(["Master", "Licence pro"]);
+const FORMATION_FAMILIES = ["BTS", "BUT", "Prépa", "Licence", "Santé", "Autre"];
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-const normalizeText = (v) =>
-  (v || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const norm = (v) =>
+  (v || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
 const shortSalary = (value) => {
   const m = `${value || ""}`.match(/\d{3,4}/g);
   if (m && m.length >= 2) return `${m[0]}–${m[1]} €/mois`;
-  if (m && m.length === 1) return `≥ ${m[0]} €/mois`;
-  return "Rémunération variable";
+  if (m?.length === 1) return `≥ ${m[0]} €/mois`;
+  return null;
 };
 
 const getFormationFamily = (f) => {
-  const sigle   = normalizeText(f?.type_formation?.sigle || f?.type_formation?.libelle_court || "");
-  const libelle = normalizeText(f?.type_formation?.libelle || "");
-  if (sigle.includes("bts")) return "BTS";
-  if (sigle.includes("but")) return "BUT";
-  if (
-    sigle.includes("cpge") || sigle.includes("prepa") || sigle.includes("prépa") ||
-    libelle.includes("classe preparatoire") || libelle.includes("classe préparatoire")
-  ) return "Prépa";
-  if (sigle.includes("licence pro") || libelle.includes("licence professionnelle")) return "Licence pro";
-  if (sigle.includes("licence") && !sigle.includes("pro")) return "Licence";
-  if (sigle.includes("master") || libelle.includes("master")) return "Master";
-  if (
-    libelle.includes("ecole") || sigle.includes("ecole") ||
-    libelle.includes("diplome d'ingenieur") ||
-    libelle.includes("grade de master") ||
-    libelle.includes("bachelor en sciences")
-  ) return "École";
+  const sigle   = norm(f?.type_formation?.sigle || f?.type_formation?.libelle_court || "");
+  const libelle = norm(f?.type_formation?.libelle || "");
+  if (sigle.startsWith("bts")) return "BTS";
+  if (sigle.startsWith("but")) return "BUT";
+  if (sigle === "cpge" || sigle === "cpi" || libelle.includes("preparatoire")) return "Prépa";
+  if (sigle === "pass" || sigle === "las" || libelle.includes("sante") || libelle.includes("paramedical") || libelle.includes("infirmier")) return "Santé";
+  if (libelle.includes("licence") && !libelle.includes("pro")) return "Licence";
   return "Autre";
 };
 
-const matchesNeedle = (fields, needle) =>
-  !needle || fields.some((f) => normalizeText(f).includes(needle));
+// ── Micro-composants ─────────────────────────────────────────────────────────
 
-// ── Micro-components ──────────────────────────────────────────────────────────
+const Pill = ({ children, color = T.muted, bg = T.bg, border = T.border }) => (
+  <span style={{ display: "inline-flex", alignItems: "center", padding: "2px 7px", borderRadius: 999, border: `1px solid ${border}`, background: bg, color, fontSize: 10, fontWeight: 700, whiteSpace: "nowrap" }}>
+    {children}
+  </span>
+);
 
-const Pill = ({ children, tone = "neutral" }) => {
-  const s = {
-    neutral: { color: T.muted,   bg: T.bg,    border: T.border     },
-    accent:  { color: T.orange,  bg: gradSoft, border: "#F9A23B28" },
-    success: { color: T.success, bg: "#2EC99A12", border: "#2EC99A28" },
-  }[tone] || { color: T.muted, bg: T.bg, border: T.border };
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", padding: "3px 8px", borderRadius: 999, border: `1px solid ${s.border}`, background: s.bg, color: s.color, fontSize: 10, fontWeight: 700, whiteSpace: "nowrap" }}>
-      {children}
-    </span>
-  );
-};
+const Spinner = () => (
+  <p style={{ margin: "28px 0", fontSize: 12, color: T.muted, textAlign: "center" }}>Chargement…</p>
+);
 
 const EmptyHint = ({ icon, title, sub }) => (
-  <div style={{ padding: "32px 16px", textAlign: "center" }}>
-    <div style={{ fontSize: 26, marginBottom: 10, opacity: 0.28 }}>{icon}</div>
-    <p style={{ margin: "0 0 4px", fontSize: 13, fontWeight: 700, color: T.text }}>{title}</p>
-    {sub && <p style={{ margin: 0, fontSize: 12, color: T.muted, lineHeight: 1.6 }}>{sub}</p>}
+  <div style={{ padding: "36px 16px", textAlign: "center" }}>
+    <div style={{ fontSize: 28, marginBottom: 12, opacity: 0.22 }}>{icon}</div>
+    <p style={{ margin: "0 0 5px", fontSize: 13, fontWeight: 700, color: T.text }}>{title}</p>
+    {sub && <p style={{ margin: 0, fontSize: 12, color: T.muted, lineHeight: 1.6, maxWidth: 200, marginInline: "auto" }}>{sub}</p>}
   </div>
 );
 
-// Column header with accent bar + optional connector arrow
-const ColHeader = ({ label, count, accent, active, showConnector }) => (
-  <div style={{ marginBottom: 14 }}>
-    {/* Accent bar — full width, height 3px, lights up when active */}
-    <div style={{ height: 3, borderRadius: 99, background: active ? accent : T.border, marginBottom: 10, transition: "background 0.3s" }} />
-    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      {showConnector && (
-        <span style={{ fontSize: 14, color: accent, opacity: active ? 1 : 0, transition: "opacity 0.3s", marginRight: 2 }}>›</span>
-      )}
-      <p style={{ margin: 0, fontSize: 10, fontWeight: 800, color: active ? T.text : T.muted, letterSpacing: "0.12em", textTransform: "uppercase", transition: "color 0.2s" }}>
+const ColHeader = ({ label, count, color, active }) => (
+  <div style={{ marginBottom: 14, flexShrink: 0 }}>
+    <div style={{ height: 3, borderRadius: 99, background: active ? color : T.border, marginBottom: 10, transition: "background 0.4s", boxShadow: active ? `0 0 8px ${color}70` : "none" }} />
+    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <p style={{ margin: 0, fontSize: 10, fontWeight: 800, color: active ? T.text : T.muted, letterSpacing: "0.12em", textTransform: "uppercase" }}>
         {label}
       </p>
-      {count != null && (
-        <Pill>{count}</Pill>
+      {count != null && count > 0 && (
+        <span style={{ display: "inline-flex", alignItems: "center", padding: "2px 7px", borderRadius: 999, border: `1px solid ${color}40`, background: `${color}10`, color, fontSize: 10, fontWeight: 700 }}>
+          {count}
+        </span>
       )}
     </div>
   </div>
 );
 
-// ── Main ──────────────────────────────────────────────────────────────────────
+// ── Composant principal ──────────────────────────────────────────────────────
 
 export default function Exploration() {
-  const { answers, savedItems, saveItem, removeItem, setPage } = useAppState();
+  const { answers, savedItems, saveItem, removeItem, openChat, setPage } = useAppState();
 
-  // ── Data ────────────────────────────────────────────────────────────────────
-  const [allDomaines,      setAllDomaines]      = useState([]);
-  const [suggested,        setSuggested]         = useState([]);
-  const [selDomaine,       setSelDomaine]        = useState(null);
-  const [domainFormations, setDomainFormations]  = useState([]);
-  const [selFormation,     setSelFormation]      = useState(null);
-  const [metiers,          setMetiers]           = useState([]);
-  const [selMetier,        setSelMetier]         = useState(null);
+  const [mode,       setMode]       = useState("formations"); // "formations" | "metiers"
+  const [selDomaine, setSelDomaine] = useState(null);
+  const [items,      setItems]      = useState([]);
+  const [loading,    setLoading]    = useState(false);
+  const [allDomaines, setAllDomaines] = useState([]);
+  const [suggested,   setSuggested]  = useState([]);
+  const [familyFilter, setFamilyFilter] = useState("Tous");
+  const [search, setSearch] = useState("");
 
-  // Lazy search
-  const [allFormations, setAllFormations] = useState(null);
-  const [allMetiers,    setAllMetiers]    = useState(null);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const searchLoadedRef = useRef(false);
-
-  // ── UI ──────────────────────────────────────────────────────────────────────
-  const [searchQuery,     setSearchQuery]     = useState("");
-  const [formationFamily, setFormationFamily] = useState("Tous");
-  const [chatOpen,        setChatOpen]        = useState(false);
-  const [chatMsg,         setChatMsg]         = useState("Pose une question quand tu veux. Je t'aide à clarifier un domaine, une formation ou un métier.");
-  const [chatInput,       setChatInput]       = useState("");
-  const [detailItem,      setDetailItem]      = useState(null);
-
-  // ── Effects ─────────────────────────────────────────────────────────────────
-
+  // ── Chargement initial des domaines ──
   useEffect(() => {
     getSuggestedDomaines(answers?.domaines).then(setSuggested);
     getAllDomaines().then(setAllDomaines);
   }, [answers]);
 
+  // ── Chargement des items quand domaine ou mode change ──
   useEffect(() => {
-    if (!selDomaine) { setDomainFormations([]); return; }
-    getFormationsByDomaine(selDomaine.id).then(setDomainFormations);
-  }, [selDomaine]);
+    if (!selDomaine) { setItems([]); return; }
+    setLoading(true);
+    setItems([]);
+    const fetch = mode === "formations"
+      ? getFormationsByDomaine(selDomaine.id)
+      : getMetiersByDomaine(selDomaine.id);
+    fetch.then(setItems).finally(() => setLoading(false));
+  }, [selDomaine, mode]);
 
-  useEffect(() => {
-    if (!selFormation) { setMetiers([]); return; }
-    getMetiersForFormation(selFormation.id).then(setMetiers);
-  }, [selFormation]);
+  // ── Handlers ─────────────────────────────────────────────────────────────
 
-  useEffect(() => {
-    if (!searchQuery || searchLoadedRef.current) return;
-    searchLoadedRef.current = true;
-    setSearchLoading(true);
-    Promise.all([getAllFormations(), getAllMetiers()]).then(([f, m]) => {
-      setAllFormations(f);
-      setAllMetiers(m);
-      setSearchLoading(false);
-    });
-  }, [searchQuery]);
+  const switchMode = (newMode) => {
+    if (newMode === mode) return;
+    setMode(newMode);
+    setFamilyFilter("Tous");
+    setSearch("");
+    setItems([]);
+  };
 
-  // ── Derived ─────────────────────────────────────────────────────────────────
+  const selectDomaine = (d) => {
+    setSelDomaine(d === selDomaine ? null : d);
+    setFamilyFilter("Tous");
+    setSearch("");
+    setItems([]);
+  };
 
-  const suggestedIds = useMemo(() => new Set(suggested.map((d) => d.id)), [suggested]);
+  // ── Données dérivées ─────────────────────────────────────────────────────
+
+  const suggestedIds = useMemo(() => new Set(suggested.map(d => d.id)), [suggested]);
 
   const domainesList = useMemo(() => {
-    const extra = allDomaines.filter((d) => !suggestedIds.has(d.id));
+    const extra = allDomaines.filter(d => !suggestedIds.has(d.id));
     return [...suggested, ...extra];
   }, [allDomaines, suggested, suggestedIds]);
 
-  const hasSearch = searchQuery.trim().length > 0;
-  const needle    = normalizeText(searchQuery);
+  // Familles disponibles dans les items actuels
+  const availableFamilies = useMemo(() => {
+    if (mode !== "formations") return [];
+    const seen = new Set(items.map(getFormationFamily));
+    return FORMATION_FAMILIES.filter(f => seen.has(f));
+  }, [items, mode]);
 
-  const visibleDomaines = useMemo(() => {
-    if (!hasSearch) return domainesList;
-    return domainesList.filter((d) => matchesNeedle([d.libelle], needle));
-  }, [domainesList, hasSearch, needle]);
+  // Items filtrés
+  const visibleItems = useMemo(() => {
+    if (mode !== "formations" || familyFilter === "Tous") return items;
+    return items.filter(f => getFormationFamily(f) === familyFilter);
+  }, [items, mode, familyFilter]);
 
-  const visibleFormations = useMemo(() => {
-    const base = hasSearch
-      ? (allFormations || [])
-      : domainFormations.filter((f) => !POURSUITE_FAMILIES.has(getFormationFamily(f)));
-
-    return base.filter((f) => {
-      const famOk   = formationFamily === "Tous" || getFormationFamily(f) === formationFamily;
-      const matchOk = matchesNeedle([f.libelle_complet, f.libelle_generique, f.type_formation?.sigle, f.niveau_etudes], needle);
-      return famOk && matchOk;
+  // Items après recherche
+  const searchedItems = useMemo(() => {
+    if (!search.trim()) return visibleItems;
+    const q = norm(search);
+    return visibleItems.filter(item => {
+      const label = mode === "formations"
+        ? norm(item.libelle_complet) + " " + norm(item.libelle_generique || "")
+        : norm(item.nom);
+      return label.includes(q);
     });
-  }, [allFormations, domainFormations, formationFamily, hasSearch, needle]);
+  }, [visibleItems, search, mode]);
 
-  const visibleMetiers = useMemo(() => {
-    const source = hasSearch ? (allMetiers || []) : metiers;
-    return source
-      .filter((m) => matchesNeedle([m.nom, m.secteurs_activite?.[0]?.libelle, m.niveau_acces_min], needle))
-      .sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
-  }, [allMetiers, hasSearch, metiers, needle]);
-
+  // Groupement par famille (formations mode uniquement)
   const groupedFormations = useMemo(() => {
+    if (mode !== "formations") return [];
     const buckets = new Map();
-    visibleFormations.forEach((f) => {
+    searchedItems.forEach(f => {
       const fam = getFormationFamily(f);
       if (!buckets.has(fam)) buckets.set(fam, []);
       buckets.get(fam).push(f);
     });
-    const ordered = [...FORMATION_FAMILIES, "Licence pro", "Master"];
-    return ordered
-      .map((fam) => ({ fam, items: (buckets.get(fam) || []).sort((a, b) => a.libelle_complet.localeCompare(b.libelle_complet, "fr")) }))
-      .filter((g) => g.items.length > 0);
-  }, [visibleFormations]);
+    return FORMATION_FAMILIES
+      .map(fam => ({ fam, items: (buckets.get(fam) || []).sort((a, b) => a.libelle_complet.localeCompare(b.libelle_complet, "fr")) }))
+      .filter(g => g.items.length > 0);
+  }, [searchedItems, mode]);
 
-  // ── Handlers ────────────────────────────────────────────────────────────────
+  const activeColor = mode === "formations" ? C.formations : C.metiers;
 
-  const selectDomaine = (d) => {
-    setSelDomaine(d);
-    setSelFormation(null);
-    setSelMetier(null);
-    setFormationFamily("Tous");
-    setChatMsg(`Tu explores "${d.libelle}". Sélectionne une formation pour voir les débouchés.`);
-  };
-
-  const selectFormation = (f) => {
-    setSelFormation(f);
-    setSelMetier(null);
-    setChatMsg(`"${f.libelle_complet}" est ouverte. Je peux t'aider à comparer ou mieux comprendre cette voie.`);
-  };
-
-  const selectMetier = (m) => {
-    setSelMetier(m);
-    setChatMsg(`Tu regardes le métier de **${m.nom}**. Pose-moi une question sur ce métier, son accès, son salaire ou ses formations.`);
-  };
-
-  const askMirai = (contextFn) => { contextFn(); setChatOpen(true); };
-
-  const clearDomaine = () => {
-    setSelDomaine(null); setSelFormation(null); setSelMetier(null);
-    setDomainFormations([]); setMetiers([]); setFormationFamily("Tous");
-  };
-
-  const clearFormation = () => {
-    setSelFormation(null); setSelMetier(null); setMetiers([]);
-  };
-
-  const sendChat = () => {
-    if (!chatInput.trim()) return;
-    setChatMsg(`${chatInput} — Recherche en cours…`);
-    setChatInput("");
-  };
-
-  // ── Breadcrumb ───────────────────────────────────────────────────────────────
-
-  const Breadcrumb = () => {
-    if (!selDomaine && !hasSearch) return null;
-    return (
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
-        <button onClick={clearDomaine} style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 12, color: T.muted, fontFamily: "'DM Sans',sans-serif", fontWeight: 600 }}>
-          Explorer
-        </button>
-        {selDomaine && (
-          <>
-            <span style={{ color: T.mutedLight, fontSize: 12 }}>›</span>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 10px 3px 8px", borderRadius: 99, background: T.navyMid, color: "white", fontSize: 11, fontWeight: 700 }}>
-              {DOMAIN_ICONS[selDomaine.libelle] || "◉"} {selDomaine.libelle}
-              <button onClick={(e) => { e.stopPropagation(); clearDomaine(); }} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.55)", fontSize: 11, padding: "0 0 0 4px", lineHeight: 1, fontFamily: "'DM Sans',sans-serif" }}>✕</button>
-            </span>
-          </>
-        )}
-        {selFormation && (
-          <>
-            <span style={{ color: T.mutedLight, fontSize: 12 }}>›</span>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 10px 3px 8px", borderRadius: 99, background: T.orange + "20", border: `1px solid ${T.orange}40`, color: T.orange, fontSize: 11, fontWeight: 700 }}>
-              {selFormation.type_formation?.sigle || "Formation"} · {selFormation.libelle_generique || selFormation.libelle_complet}
-              <button onClick={(e) => { e.stopPropagation(); clearFormation(); }} style={{ background: "none", border: "none", cursor: "pointer", color: T.orange, opacity: 0.55, fontSize: 11, padding: "0 0 0 4px", lineHeight: 1, fontFamily: "'DM Sans',sans-serif" }}>✕</button>
-            </span>
-          </>
-        )}
-      </div>
-    );
-  };
-
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // ── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ flex: 1, display: "flex", overflow: "hidden", fontFamily: "'DM Sans',sans-serif", background: "linear-gradient(180deg, #FBFCFE 0%, #F5F7FB 100%)" }}>
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", fontFamily: "'DM Sans',sans-serif", background: "linear-gradient(180deg,#FBFCFE 0%,#F5F7FB 100%)" }}>
 
-      {detailItem && (
-        <DetailPanel
-          item={detailItem}
-          onClose={() => setDetailItem(null)}
-          onSave={saveItem}
-          onRemove={removeItem}
-          savedItems={savedItems}
-          onAskMirai={() => setPage("chatbot")}
-        />
-      )}
-
-      <div style={{ flex: 1, overflowY: "auto", padding: "28px 28px 28px 40px", display: "flex", flexDirection: "column" }}>
-
-        {/* Header */}
-        <div style={{ marginBottom: 16 }}>
-          <h1 style={{ margin: "0 0 4px", fontSize: 26, fontWeight: 800, color: T.text, letterSpacing: "-0.04em" }}>Explorer</h1>
-          <p style={{ margin: 0, fontSize: 13, color: T.muted }}>
-            Sélectionne un domaine, puis une formation pour voir les débouchés métiers.
+      {/* ── Header ──────────────────────────────────────────────────────── */}
+      <div style={{ padding: "24px 32px 16px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div>
+          <h1 style={{ margin: "0 0 2px", fontSize: 24, fontWeight: 800, color: T.text, letterSpacing: "-0.04em" }}>Explorer</h1>
+          <p style={{ margin: 0, fontSize: 12, color: T.muted }}>
+            Choisis un domaine {mode === "formations" ? "et découvre les formations post-bac." : "et découvre les métiers associés."}
           </p>
         </div>
 
-        {/* Search */}
-        <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 20 }}>
-          <div style={{ flex: 1, position: "relative" }}>
-            <span style={{ position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)", color: T.muted, fontSize: 14, pointerEvents: "none" }}>⌕</span>
-            <input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Tu cherches un métier ou une formation précise ?"
-              style={{ width: "100%", padding: "12px 14px 12px 36px", borderRadius: 14, border: `1px solid ${T.border}`, background: T.white, color: T.text, fontSize: 13, outline: "none", fontFamily: "'DM Sans',sans-serif", boxShadow: "0 4px 16px rgba(15,31,61,0.04)", boxSizing: "border-box" }}
-            />
-          </div>
-          {hasSearch && (
-            <button onClick={() => setSearchQuery("")} style={{ padding: "11px 14px", borderRadius: 12, border: `1px solid ${T.border}`, background: T.bg, color: T.muted, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}>
-              Effacer
-            </button>
-          )}
-        </div>
-
-        <Breadcrumb />
-
-        {/* ── 3-column layout ───────────────────────────────────────────────── */}
-        <div style={{ display: "grid", gridTemplateColumns: "220px minmax(0, 1.3fr) minmax(0, 1fr)", gap: 20, alignItems: "start", flex: 1 }}>
-
-          {/* ── Col 1 : Domaines ──────────────────────────────────────────── */}
-          <section>
-            <ColHeader
-              label="Domaines"
-              count={hasSearch ? visibleDomaines.length : null}
-              accent={COL_ACCENT.domaines}
-              active={true}
-            />
-
-            {visibleDomaines.length === 0 ? (
-              <EmptyHint icon="🔍" title="Aucun domaine" sub="Essaie un autre mot-clé." />
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {visibleDomaines.map((d) => {
-                  const isSugg   = suggestedIds.has(d.id);
-                  const isActive = selDomaine?.id === d.id;
-                  const isDimmed = selDomaine && !isActive;
-                  return (
-                    <div
-                      key={d.id}
-                      onClick={() => selectDomaine(d)}
-                      className={`mirai-card${isDimmed ? " mirai-card-dimmed" : ""}`}
-                      style={{
-                        padding: "10px 12px",
-                        borderRadius: 14,
-                        cursor: "pointer",
-                        background: isActive ? T.navyMid : T.white,
-                        border: `1.5px solid ${isActive ? T.navyMid : isSugg ? "#F9A23B55" : T.border}`,
-                        boxShadow: isActive ? "0 8px 22px rgba(15,31,61,0.15)" : isSugg ? "0 2px 10px rgba(249,162,59,0.08)" : "none",
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
-                        <span style={{ fontSize: 17, flexShrink: 0, marginTop: 1 }}>{DOMAIN_ICONS[d.libelle] || "◉"}</span>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ margin: "0 0 8px", fontSize: 12, fontWeight: 700, color: isActive ? "white" : T.text, lineHeight: 1.25, letterSpacing: "-0.01em" }}>
-                            {d.libelle}
-                          </p>
-                          <div onClick={(e) => e.stopPropagation()}>
-                            <SaveBtn
-                              type="domaine"
-                              refId={String(d.id)}
-                              label={d.libelle}
-                              parent={null}
-                              savedItems={savedItems}
-                              onSave={saveItem}
-                              onRemove={removeItem}
-                              small
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-
-          {/* ── Col 2 : Formations ────────────────────────────────────────── */}
-          <section>
-            <ColHeader
-              label="Formations"
-              count={(selDomaine || hasSearch) ? visibleFormations.length : null}
-              accent={COL_ACCENT.formations}
-              active={!!(selDomaine || hasSearch)}
-              showConnector={!!(selDomaine || hasSearch)}
-            />
-
-            {!selDomaine && !hasSearch ? (
-              <EmptyHint icon="🎓" title="Sélectionne un domaine" sub="Les formations post-bac apparaîtront ici, regroupées par type (BTS, BUT, Prépa, Licence…)" />
-            ) : searchLoading ? (
-              <p style={{ fontSize: 12, color: T.muted, padding: "16px 0" }}>Chargement…</p>
-            ) : (
-              <>
-                {/* Family filter pills */}
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
-                  {["Tous", ...FORMATION_FAMILIES].map((fam) => (
-                    <button
-                      key={fam}
-                      onClick={() => setFormationFamily(fam)}
-                      style={{ padding: "5px 10px", borderRadius: 999, border: `1px solid ${formationFamily === fam ? T.orange : T.border}`, background: formationFamily === fam ? gradSoft : T.white, color: formationFamily === fam ? T.orange : T.muted, fontSize: 10, fontWeight: 800, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", transition: "all 0.15s" }}
-                    >
-                      {fam}
-                    </button>
-                  ))}
-                </div>
-
-                {groupedFormations.length === 0 ? (
-                  <EmptyHint icon="📭" title="Aucune formation trouvée" sub="Essaie un autre filtre ou mot-clé." />
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                    {groupedFormations.map(({ fam, items }) => (
-                      <div key={fam}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                          <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: T.text }}>{fam}</p>
-                          <Pill>{items.length}</Pill>
-                        </div>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-                          {items.map((f) => {
-                            const isActive = selFormation?.id === f.id;
-                            const isDimmed = selFormation && !isActive;
-                            return (
-                              <div
-                                key={f.id}
-                                onClick={() => selectFormation(f)}
-                                className={`mirai-card${isDimmed ? " mirai-card-dimmed" : ""}`}
-                                style={{
-                                  padding: "12px 14px",
-                                  borderRadius: 14,
-                                  cursor: "pointer",
-                                  background: isActive ? T.navyMid : T.white,
-                                  border: `1px solid ${isActive ? T.navyMid : T.border}`,
-                                  boxShadow: isActive ? "0 8px 22px rgba(15,31,61,0.15)" : "none",
-                                }}
-                              >
-                                <p style={{ margin: "0 0 7px", fontSize: 12, fontWeight: 700, color: isActive ? "white" : T.text, lineHeight: 1.35 }}>
-                                  {f.libelle_complet}
-                                </p>
-                                <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 8 }}>
-                                  {f.type_formation?.sigle && <Pill tone={isActive ? "accent" : "neutral"}>{f.type_formation.sigle}</Pill>}
-                                  {f.niveau_etudes && <Pill tone="neutral">{f.niveau_etudes}</Pill>}
-                                  {f.duree && <Pill tone={isActive ? "success" : "neutral"}>{f.duree}</Pill>}
-                                </div>
-                                <div style={{ display: "flex", gap: 6 }} onClick={(e) => e.stopPropagation()}>
-                                  <SaveBtn
-                                    type="formation" refId={f.id} label={f.libelle_complet}
-                                    parent={selDomaine?.libelle || f.domaines?.[0]?.libelle || null}
-                                    parentRefId={String(selDomaine?.id || f.domaines?.[0]?.id || "")}
-                                    savedItems={savedItems} onSave={saveItem} onRemove={removeItem} small
-                                  />
-                                  <button
-                                    onClick={() => setDetailItem({ type: "formation", refId: f.id, label: f.libelle_complet, domaine: selDomaine?.libelle || f.domaines?.[0]?.libelle || null })}
-                                    style={{ display: "inline-flex", alignItems: "center", padding: "4px 9px", borderRadius: 9, border: `1px solid ${isActive ? "rgba(255,255,255,0.22)" : T.border}`, background: isActive ? "rgba(255,255,255,0.08)" : T.bg, cursor: "pointer", fontSize: 10, fontWeight: 700, color: isActive ? "rgba(255,255,255,0.75)" : T.muted, fontFamily: "'DM Sans',sans-serif" }}
-                                  >
-                                    Détails
-                                  </button>
-                                  <button
-                                    onClick={() => askMirai(() => selectFormation(f))}
-                                    style={{ display: "inline-flex", alignItems: "center", padding: "4px 9px", borderRadius: 9, border: `1px solid ${isActive ? "rgba(255,255,255,0.22)" : T.border}`, background: isActive ? "rgba(255,255,255,0.08)" : T.bg, cursor: "pointer", fontSize: 10, fontWeight: 700, color: isActive ? "rgba(255,255,255,0.75)" : T.muted, fontFamily: "'DM Sans',sans-serif" }}
-                                  >
-                                    ◈ Demander
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-          </section>
-
-          {/* ── Col 3 : Métiers ───────────────────────────────────────────── */}
-          <section>
-            <ColHeader
-              label="Métiers"
-              count={(selFormation || hasSearch) ? visibleMetiers.length : null}
-              accent={COL_ACCENT.metiers}
-              active={!!(selFormation || hasSearch)}
-              showConnector={!!(selFormation || hasSearch)}
-            />
-
-            {!selFormation && !hasSearch ? (
-              <EmptyHint icon="💼" title="Sélectionne une formation" sub="Tu verras les débouchés métiers associés à cette voie." />
-            ) : searchLoading ? (
-              <p style={{ fontSize: 12, color: T.muted, padding: "16px 0" }}>Chargement…</p>
-            ) : visibleMetiers.length === 0 ? (
-              <EmptyHint icon="📭" title="Aucun métier trouvé" sub="Essaie un autre mot-clé ou une autre formation." />
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-                {visibleMetiers.map((m) => {
-                  const secteur  = m.secteurs_activite?.[0]?.libelle;
-                  const isActive = selMetier?.id === m.id;
-                  const isDimmed = selMetier && !isActive;
-                  return (
-                    <div
-                      key={m.id}
-                      onClick={() => selectMetier(m)}
-                      className={`mirai-card${isDimmed ? " mirai-card-dimmed" : ""}`}
-                      style={{
-                        padding: "12px 14px",
-                        borderRadius: 14,
-                        cursor: "pointer",
-                        background: isActive ? gradSoft : T.white,
-                        // Accent left border — differentiates métiers from formations
-                        borderLeft: `3px solid ${isActive ? T.orange : COL_ACCENT.metiers + "55"}`,
-                        borderTop: `1px solid ${isActive ? T.orange + "50" : T.border}`,
-                        borderRight: `1px solid ${isActive ? T.orange + "50" : T.border}`,
-                        borderBottom: `1px solid ${isActive ? T.orange + "50" : T.border}`,
-                        boxShadow: isActive ? "0 6px 18px rgba(249,162,59,0.12)" : "none",
-                      }}
-                    >
-                      <p style={{ margin: "0 0 7px", fontSize: 13, fontWeight: 700, color: T.text, lineHeight: 1.3 }}>
-                        {m.nom}
-                      </p>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 8 }}>
-                        {secteur && <Pill tone="accent">{secteur}</Pill>}
-                        {m.niveau_acces_min && <Pill tone="success">{m.niveau_acces_min}</Pill>}
-                        <Pill tone="neutral">{shortSalary(m.salaire_debutant)}</Pill>
-                      </div>
-                      <div style={{ display: "flex", gap: 6 }} onClick={(e) => e.stopPropagation()}>
-                        <SaveBtn
-                          type="metier" refId={m.id} label={m.nom}
-                          parent={selFormation?.libelle_complet || null}
-                          parentRefId={selFormation?.id || null}
-                          savedItems={savedItems} onSave={saveItem} onRemove={removeItem} small
-                        />
-                        <button
-                          onClick={() => setDetailItem({ type: "metier", refId: m.id, label: m.nom, formation: selFormation?.libelle_complet || null, formationId: selFormation?.id || null })}
-                          style={{ display: "inline-flex", alignItems: "center", padding: "4px 9px", borderRadius: 9, border: `1px solid ${T.border}`, background: T.bg, cursor: "pointer", fontSize: 10, fontWeight: 700, color: T.muted, fontFamily: "'DM Sans',sans-serif" }}
-                        >
-                          Détails
-                        </button>
-                        <button
-                          onClick={() => askMirai(() => selectMetier(m))}
-                          style={{ display: "inline-flex", alignItems: "center", padding: "4px 9px", borderRadius: 9, border: `1px solid ${T.border}`, background: T.bg, cursor: "pointer", fontSize: 10, fontWeight: 700, color: T.muted, fontFamily: "'DM Sans',sans-serif" }}
-                        >
-                          ◈ Demander
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-
+        {/* Toggle formations / métiers */}
+        <div style={{ display: "flex", background: T.bg, border: `1px solid ${T.border}`, borderRadius: 12, padding: 3, gap: 2 }}>
+          {[
+            { key: "formations", label: "Formations" },
+            { key: "metiers",    label: "Métiers" },
+          ].map(({ key, label }) => {
+            const active = mode === key;
+            const col = key === "formations" ? C.formations : C.metiers;
+            return (
+              <button
+                key={key}
+                onClick={() => switchMode(key)}
+                style={{
+                  padding: "7px 16px", borderRadius: 9, border: "none", cursor: "pointer",
+                  fontFamily: "'DM Sans',sans-serif", fontSize: 12, fontWeight: 700,
+                  background: active ? col : "transparent",
+                  color: active ? "white" : T.muted,
+                  boxShadow: active ? `0 2px 8px ${col}40` : "none",
+                  transition: "all 0.2s",
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* ── Chatbot panel ─────────────────────────────────────────────────────── */}
-      {chatOpen && (
-        <div style={{ width: 272, flexShrink: 0, background: T.white, borderLeft: `1px solid ${T.border}`, display: "flex", flexDirection: "column" }}>
-          <div style={{ padding: "14px 18px", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ width: 28, height: 28, borderRadius: 9, background: grad, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "white" }}>◈</div>
-              <div>
-                <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: T.text }}>Agent MIRAI</p>
-                <p style={{ margin: 0, fontSize: 10, color: T.muted }}>
-                  {selMetier
-                    ? `Métier · ${selMetier.nom}`
-                    : selFormation
-                    ? `Formation · ${selFormation.type_formation?.sigle || "?"}`
-                    : selDomaine
-                    ? `Domaine · ${selDomaine.libelle}`
-                    : "Exploration"}
-                </p>
-              </div>
-            </div>
-            <button onClick={() => setChatOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, color: T.muted, padding: 4 }}>✕</button>
-          </div>
+      {/* ── 2 colonnes ──────────────────────────────────────────────────── */}
+      <div style={{ flex: 1, display: "flex", gap: 0, overflow: "hidden", padding: "0 0 0 32px" }}>
 
-          <div style={{ flex: 1, overflowY: "auto", padding: "14px 14px 8px" }}>
-            <div style={{ background: T.bg, borderRadius: 13, padding: "11px 13px", fontSize: 12, color: T.text, lineHeight: 1.65 }}>
-              {chatMsg.split("**").map((part, i) =>
-                i % 2 === 1 ? <strong key={i}>{part}</strong> : <span key={i}>{part}</span>
-              )}
+        {/* ── Col 0 : Domaines ──────────────────────────────────────────── */}
+        <div style={{ width: 240, flexShrink: 0, display: "flex", flexDirection: "column", paddingRight: 16 }}>
+          <div style={{ flex: 1, overflowY: "auto", paddingBottom: 32 }}>
+            <ColHeader label="Domaines" color={C.domaines} active={true} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {domainesList.map(d => {
+                const isActive = selDomaine?.id === d.id;
+                return (
+                  <div
+                    key={d.id}
+                    onClick={() => selectDomaine(d)}
+                    className="mirai-card"
+                    style={{
+                      padding: "10px 12px", borderRadius: 14, cursor: "pointer",
+                      background: isActive ? C.domaines : T.white,
+                      border: `1.5px solid ${isActive ? C.domaines : suggestedIds.has(d.id) ? "#F9A23B55" : T.border}`,
+                      boxShadow: isActive ? `0 6px 18px ${C.domaines}30` : "none",
+                      transition: "all 0.22s",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                      <span style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>{DOMAIN_ICONS[d.libelle] || "◉"}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ margin: "0 0 7px", fontSize: 12, fontWeight: 700, color: isActive ? "white" : T.text, lineHeight: 1.25, letterSpacing: "-0.01em" }}>
+                          {d.libelle}
+                        </p>
+                        <div onClick={e => e.stopPropagation()}>
+                          <SaveBtn type="domaine" refId={String(d.id)} label={d.libelle} parent={null} savedItems={savedItems} onSave={saveItem} onRemove={removeItem} small />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-            <div style={{ marginTop: 9, display: "flex", flexDirection: "column", gap: 6 }}>
-              {(selMetier
-                ? ["Comment y accéder ?", "Quel salaire en sortie ?", "Quelles qualités faut-il ?"]
-                : selFormation
-                ? ["Quels sont les débouchés ?", "C'est sélectif ?", "Salaire en sortie ?"]
-                : ["Par où commencer ?", "Quel domaine me correspond ?", "Différence BTS / BUT ?"]
-              ).map((q) => (
-                <div key={q} onClick={() => setChatMsg(`Sur "${q.toLowerCase()}", voici ce que je sais…`)} style={{ padding: "7px 11px", borderRadius: 9, border: `1px solid ${T.border}`, fontSize: 11, color: T.muted, cursor: "pointer", background: T.bg }}>
-                  {q}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div style={{ padding: "11px 14px", borderTop: `1px solid ${T.border}`, display: "flex", gap: 7 }}>
-            <input
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") sendChat(); }}
-              placeholder="Ta question…"
-              style={{ flex: 1, padding: "8px 11px", borderRadius: 9, border: `1px solid ${T.border}`, fontSize: 12, fontFamily: "'DM Sans',sans-serif", color: T.text, outline: "none", background: T.bg }}
-            />
-            <button onClick={sendChat} style={{ width: 32, height: 32, borderRadius: 8, border: "none", background: grad, cursor: "pointer", color: "white", fontSize: 12, flexShrink: 0 }}>→</button>
           </div>
         </div>
-      )}
 
-      {/* Pulsing chatbot trigger */}
-      {!chatOpen && (
-        <button
-          className="mirai-chatbot-pulse"
-          onClick={() => setChatOpen(true)}
-          style={{ position: "fixed", bottom: 28, right: 28, width: 48, height: 48, borderRadius: "50%", border: "none", background: grad, color: "white", fontSize: 18, cursor: "pointer", boxShadow: "0 6px 20px rgba(249,162,59,0.45)", zIndex: 100 }}
-        >
-          ◈
-        </button>
-      )}
+        {/* Séparateur */}
+        <div style={{ width: 1, background: selDomaine ? `${activeColor}30` : T.border, flexShrink: 0, transition: "background 0.4s", margin: "0 16px" }} />
+
+        {/* ── Col 1 : Formations ou Métiers ─────────────────────────────── */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", paddingRight: 32 }}>
+
+          <ColHeader
+            label={mode === "formations" ? "Formations post-bac" : "Métiers"}
+            count={selDomaine && !search ? items.length : selDomaine && search ? searchedItems.length : null}
+            color={activeColor}
+            active={!!selDomaine}
+          />
+
+          {/* Barre de recherche */}
+          {selDomaine && (
+            <div style={{ position: "relative", marginBottom: 12, flexShrink: 0 }}>
+              <svg style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder={`Rechercher ${mode === "formations" ? "une formation" : "un métier"}…`}
+                style={{ width: "100%", boxSizing: "border-box", padding: "8px 32px 8px 30px", borderRadius: 10, border: `1px solid ${search ? activeColor + "60" : T.border}`, fontSize: 12, fontFamily: "'DM Sans',sans-serif", color: T.text, outline: "none", background: T.white, transition: "border-color 0.15s" }}
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch("")}
+                  style={{ position: "absolute", right: 9, top: "50%", transform: "translateY(-50%)", border: "none", background: "none", cursor: "pointer", color: T.muted, fontSize: 13, lineHeight: 1, padding: 2 }}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Filtre par famille (formations uniquement) */}
+          {mode === "formations" && selDomaine && availableFamilies.length > 1 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 14, flexShrink: 0 }}>
+              {["Tous", ...availableFamilies].map(fam => (
+                <button
+                  key={fam}
+                  onClick={() => setFamilyFilter(fam)}
+                  style={{
+                    padding: "4px 10px", borderRadius: 999, cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
+                    fontSize: 10, fontWeight: 800, transition: "all 0.15s",
+                    border: `1px solid ${familyFilter === fam ? C.formations : T.border}`,
+                    background: familyFilter === fam ? `${C.formations}15` : T.white,
+                    color: familyFilter === fam ? C.formations : T.muted,
+                  }}
+                >
+                  {fam}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div style={{ flex: 1, overflowY: "auto", paddingBottom: 32 }}>
+            {!selDomaine ? (
+              <EmptyHint icon="🗺️" title="Sélectionne un domaine" sub={`Les ${mode === "formations" ? "formations post-bac" : "métiers"} du domaine apparaîtront ici.`} />
+            ) : loading ? (
+              <Spinner />
+            ) : items.length === 0 ? (
+              <EmptyHint icon="📭" title="Aucun résultat" sub="Ce domaine ne contient pas encore de données." />
+            ) : search && searchedItems.length === 0 ? (
+              <SearchFallback query={search} mode={mode} onAskMirai={() => setPage("chatbot")} />
+            ) : mode === "formations" ? (
+              <FormationsList
+                groups={groupedFormations}
+                selDomaine={selDomaine}
+                savedItems={savedItems}
+                onSave={saveItem}
+                onRemove={removeItem}
+                onAskMirai={(f) => openChat({ type: "formation", refId: f.id, label: f.libelle_complet })}
+              />
+            ) : (
+              <MetiersList
+                metiers={searchedItems}
+                selDomaine={selDomaine}
+                savedItems={savedItems}
+                onSave={saveItem}
+                onRemove={removeItem}
+                onAskMirai={(m) => openChat({ type: "metier", refId: m.id, label: m.nom })}
+              />
+            )}
+          </div>
+        </div>
+
+      </div>
     </div>
+  );
+}
+
+// ── Fallback recherche ────────────────────────────────────────────────────────
+
+function SearchFallback({ query, mode, onAskMirai }) {
+  return (
+    <div style={{ padding: "32px 16px", textAlign: "center" }}>
+      <div style={{ fontSize: 26, marginBottom: 12, opacity: 0.2 }}>🔍</div>
+      <p style={{ margin: "0 0 6px", fontSize: 13, fontWeight: 700, color: T.text }}>
+        Aucun résultat pour « {query} »
+      </p>
+      <p style={{ margin: "0 0 18px", fontSize: 12, color: T.muted, lineHeight: 1.6, maxWidth: 220, marginInline: "auto" }}>
+        Ce {mode === "formations" ? "formation" : "métier"} n'est pas dans notre base de données pour ce domaine.
+      </p>
+      <button
+        onClick={onAskMirai}
+        style={{
+          display: "inline-flex", alignItems: "center", gap: 6,
+          padding: "9px 16px", borderRadius: 10, border: "none", cursor: "pointer",
+          fontFamily: "'DM Sans',sans-serif", fontSize: 12, fontWeight: 700,
+          background: grad, color: "white",
+          boxShadow: "0 4px 14px rgba(249,162,59,0.28)",
+        }}
+      >
+        ◈ Demander à MIRAI
+      </button>
+    </div>
+  );
+}
+
+// ── Formations ────────────────────────────────────────────────────────────────
+
+function FormationsList({ groups, selDomaine, savedItems, onSave, onRemove, onAskMirai }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {groups.map(({ fam, items }) => (
+        <div key={fam}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
+            <p style={{ margin: 0, fontSize: 10, fontWeight: 800, color: T.text, letterSpacing: "0.05em", textTransform: "uppercase" }}>{fam}</p>
+            <span style={{ fontSize: 10, color: T.muted, fontWeight: 600 }}>{items.length}</span>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+            {items.map(f => (
+              <FormationCard
+                key={f.id}
+                f={f}
+                selDomaine={selDomaine}
+                savedItems={savedItems}
+                onSave={onSave}
+                onRemove={onRemove}
+                onAskMirai={() => onAskMirai(f)}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FormationCard({ f, selDomaine, savedItems, onSave, onRemove, onAskMirai }) {
+  return (
+    <div
+      className="mirai-card"
+      style={{ padding: "12px 14px", borderRadius: 14, background: T.white, border: `1.5px solid ${T.border}`, cursor: "default" }}
+    >
+      <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 700, color: T.text, lineHeight: 1.3 }}>
+        {f.libelle_complet}
+      </p>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 10 }}>
+        {f.type_formation?.sigle && (
+          <Pill color={C.formations} bg={`${C.formations}12`} border={`${C.formations}30`}>{f.type_formation.sigle}</Pill>
+        )}
+        {f.niveau_etudes && <Pill>{f.niveau_etudes}</Pill>}
+        {f.duree && <Pill color={T.orange} bg={gradSoft} border="#F9A23B28">{f.duree}</Pill>}
+      </div>
+      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        <SaveBtn
+          type="formation"
+          refId={f.id}
+          label={f.libelle_complet}
+          parent={selDomaine?.libelle || null}
+          parentRefId={String(selDomaine?.id || "")}
+          savedItems={savedItems}
+          onSave={onSave}
+          onRemove={onRemove}
+          small
+        />
+        <AskMiraiBtn onClick={onAskMirai} />
+        {f.url && (
+          <a
+            href={f.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Voir sur Onisep"
+            style={{ display: "inline-flex", alignItems: "center", padding: "4px 8px", borderRadius: 8, border: `1px solid ${T.border}`, background: T.bg, textDecoration: "none", fontSize: 10, fontWeight: 700, color: T.muted, transition: "border-color 0.15s" }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = T.text}
+            onMouseLeave={e => e.currentTarget.style.borderColor = T.border}
+          >
+            ↗ Onisep
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Métiers ───────────────────────────────────────────────────────────────────
+
+function MetiersList({ metiers, selDomaine, savedItems, onSave, onRemove, onAskMirai }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+      {metiers.map(m => (
+        <MetierCard
+          key={m.id}
+          m={m}
+          selDomaine={selDomaine}
+          savedItems={savedItems}
+          onSave={onSave}
+          onRemove={onRemove}
+          onAskMirai={() => onAskMirai(m)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function MetierCard({ m, selDomaine, savedItems, onSave, onRemove, onAskMirai }) {
+  const salaire = shortSalary(m.salaire_debutant);
+  return (
+    <div
+      className="mirai-card"
+      style={{ padding: "12px 14px", borderRadius: 14, background: T.white, borderLeft: `3px solid ${C.metiers}`, borderTop: `1px solid ${T.border}`, borderRight: `1px solid ${T.border}`, borderBottom: `1px solid ${T.border}`, cursor: "default" }}
+    >
+      <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 700, color: T.text, lineHeight: 1.3 }}>
+        {m.nom}
+      </p>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 10 }}>
+        {m.niveau_acces_min && <Pill color="#2EC99A" bg="#2EC99A12" border="#2EC99A28">{m.niveau_acces_min}</Pill>}
+        {salaire && <Pill color={T.orange} bg={gradSoft} border="#F9A23B28">{salaire}</Pill>}
+      </div>
+      <div style={{ display: "flex", gap: 6 }}>
+        <SaveBtn
+          type="metier"
+          refId={m.id}
+          label={m.nom}
+          parent={selDomaine?.libelle || null}
+          parentRefId={String(selDomaine?.id || "")}
+          savedItems={savedItems}
+          onSave={onSave}
+          onRemove={onRemove}
+          small
+        />
+        <AskMiraiBtn onClick={onAskMirai} />
+      </div>
+    </div>
+  );
+}
+
+// ── Bouton Demander à Mirai ───────────────────────────────────────────────────
+
+function AskMiraiBtn({ onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 5,
+        padding: "4px 10px", borderRadius: 8, border: "none", cursor: "pointer",
+        fontFamily: "'DM Sans',sans-serif", fontSize: 10, fontWeight: 700,
+        background: grad, color: "white",
+        boxShadow: "0 2px 8px rgba(249,162,59,0.3)",
+        transition: "opacity 0.15s",
+      }}
+      onMouseEnter={e => e.currentTarget.style.opacity = "0.85"}
+      onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+    >
+      ◈ Demander à Mirai
+    </button>
   );
 }

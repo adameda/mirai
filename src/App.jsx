@@ -7,6 +7,7 @@ import DashboardEleve from "./platform/pages/DashboardEleve";
 import Exploration from "./platform/pages/Exploration";
 import Favoris from "./platform/pages/Favoris";
 import Chatbot from "./platform/pages/Chatbot";
+import Parcoursup from "./platform/pages/Parcoursup";
 import ProfDashboard from "./platform/pages/ProfDashboard";
 import ProfClasse from "./platform/pages/ProfClasse";
 import ProfJalons from "./platform/pages/ProfJalons";
@@ -60,6 +61,7 @@ function AppShell() {
     switch (page) {
       case "dashboard":   return <DashboardEleve />;
       case "exploration": return <Exploration />;
+      case "parcoursup":  return <Parcoursup />;
       case "favoris":     return <Favoris />;
       case "chatbot":     return <Chatbot />;
       default:            return null;

@@ -59,7 +59,7 @@ export default function DashboardEleve() {
               const nodeHot = isCurrent || isOverdue;
               const cardBg = isDone ? "#F4FBF8" : isOverdue ? "#FFF6EF" : showExpanded ? `linear-gradient(135deg,${T.navy},${T.navyMid})` : T.bg;
               const cardBorder = isDone ? "#2EC99A30" : isOverdue ? "#F9A23B35" : showExpanded ? T.navyMid : T.border;
-              const titleColor = showExpanded ? "white" : isDone ? T.success : isOverdue ? T.orange : isLocked ? T.mutedLight : T.text;
+              const titleColor = isOverdue ? T.orange : showExpanded ? "white" : isDone ? T.success : isLocked ? T.mutedLight : T.text;
               const statusLabel = isDone ? (isLateDone ? "Validé hors délai" : "Validé") : isOverdue ? "En retard" : isCurrent ? "En cours" : "Verrouillé";
 
               return (
@@ -104,11 +104,11 @@ export default function DashboardEleve() {
 
                       {showExpanded && (
                         <>
-                          <p style={{ margin: "0 0 16px", fontSize: 13, color: showExpanded ? "rgba(255,255,255,0.6)" : T.muted, lineHeight: 1.65 }}>{obj.desc}</p>
-                          <ProgressBar value={obj.value} max={obj.target} light />
+                          <p style={{ margin: "0 0 16px", fontSize: 13, color: isOverdue ? T.muted : showExpanded ? "rgba(255,255,255,0.6)" : T.muted, lineHeight: 1.65 }}>{obj.desc}</p>
+                          <ProgressBar value={obj.value} max={obj.target} light={!isOverdue} />
                           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-                              <span style={{ fontSize: 11, color: "rgba(255,255,255,0.35)" }}>
+                              <span style={{ fontSize: 11, color: isOverdue ? T.mutedLight : "rgba(255,255,255,0.35)" }}>
                                 {obj.date ? `Date limite : ${obj.date}` : "Sans date limite"}
                               </span>
                               {!onboarded && obj.id === 1 && (
@@ -122,7 +122,7 @@ export default function DashboardEleve() {
                                 </button>
                               )}
                             </div>
-                            {isOverdue && !obj.achieved && <p style={{ margin: 0, fontSize: 12, color: "rgba(255,255,255,0.5)", lineHeight: 1.55 }}>La date limite est dépassée. L'objectif reste à faire.</p>}
+                            {isOverdue && !obj.achieved && <p style={{ margin: 0, fontSize: 12, color: T.muted, lineHeight: 1.55 }}>La date limite est dépassée. L'objectif reste à faire.</p>}
                             {isDone && isLateDone && <p style={{ margin: 0, fontSize: 12, color: "rgba(255,255,255,0.5)", lineHeight: 1.55 }}>Objectif validé après la date limite.</p>}
                           </div>
                         </>

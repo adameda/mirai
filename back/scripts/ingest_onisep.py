@@ -16,14 +16,18 @@ Les données utilisateurs (comptes, favoris, classes) ne sont PAS touchées.
 Architecture du mapping :
     XML formations → sous_domaine_web → [CSV] → macro-domaine Onisep → [MACRO_DOMAINE_MAPPING] → domaine Mirai
     CSV métiers    → domaine/sous-domaine       → [MACRO_DOMAINE_MAPPING] → domaine Mirai
+    YAML manuel    → domaines explicites (CPGE, CPI, PASS, LAS, IFSI)
 """
 
 import csv
 import re
 import sys
 import logging
+from collections import Counter
 from pathlib import Path
 from lxml import etree
+from sqlalchemy import text
+import yaml
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -31,7 +35,7 @@ from app.core.database import engine, SessionLocal
 from app.models.base import Base
 from app.models.onisep import (
     Domaine, Formation, Metier,
-    FormationDomaine, FormationMetier, MetierDomaine,
+    FormationDomaine, MetierDomaine,
 )
 from app.models.favori import Favori
 
@@ -45,20 +49,42 @@ XML_FORMATIONS = DATA_DIR / "Onisep_Ideo_Fiches_Formations_10022026.xml"
 XML_METIERS    = DATA_DIR / "Onisep_Ideo_Fiches_Metiers_10022026.xml"
 CSV_FORMATIONS = DATA_DIR / "ideo-formations_initiales_en_france.csv"
 CSV_METIERS    = DATA_DIR / "ideo-metiers_onisep.csv"
+YAML_MANUEL    = DATA_DIR / "manuel_formations.yaml"
 
 # ── Niveaux d'études ciblés (lycéens → post-bac) ─────────────────────────────
 
 NIVEAUX_CIBLES = {"bac + 2", "bac + 3", "bac + 4", "bac + 5"}
 
-# Types de formations inclus même sans description ni texte d'accès.
-# Onisep ne remplit pas ces champs pour les écoles d'ingénieurs et de commerce :
-# les fiches sont vides mais le nom + niveau + lien Onisep restent utiles.
+# Types ingérés même sans description ni texte d'accès.
+# Onisep ne remplit pas ces champs pour les écoles d'ingénieurs et de commerce,
+# mais le nom + niveau + lien restent utiles pour le chatbot.
 TYPE_LIBELLE_SANS_CONTENU_OK = {
     "diplôme d'ingénieur",
     "diplôme d'ingénieur spécialisé",
     "diplôme d'école de commerce visé de niveau bac + 4 ou 5",
     "diplôme d'école de commerce visé (bac + 3)",
     "bachelor en sciences et ingénierie",
+}
+
+# Types accessibles directement depuis le bac → col2 de la page Exploration.
+# BTSA exclu : filière agricole, aucun domaine Mirai correspondant.
+# CPGE et CPI absents du XML Onisep → gérés via YAML manuel.
+TYPES_COL2 = {
+    "brevet de technicien supérieur",
+    "bachelor universitaire de technologie",
+    "licence",
+    "diplôme national des métiers d'art et du design",
+    "diplôme national supérieur professionnel",
+    "diplôme national supérieur d'expression plastique",
+    "diplôme national d'art",
+    "diplôme supérieur d'arts appliqués",
+    "diplôme d'état du paramédical",
+    "autre formation en santé",
+    "diplôme des écoles d'architecture",
+    "diplôme d'état en art",
+    "diplôme d'état du travail social",
+    "diplôme d'iep",
+    "diplôme universitaire de musicien intervenant",
 }
 
 # ── 13 domaines Mirai ────────────────────────────────────────────────────────
@@ -80,14 +106,15 @@ MIRAI_DOMAINES = [
 ]
 
 # ── Mapping macro-domaine Onisep (minuscules) → domaine Mirai ────────────────
-# 18 entrées au lieu des ~200 du mapping précédent.
-# Hors scope v1 : "agriculture, animaux" et "armée, sécurité".
+# "agriculture, animaux" : hors scope (pas de domaine Mirai agriculture).
+# "armée, sécurité" : mappé vers Ingénierie pour couvrir le BTS Sécurité.
 
 MACRO_DOMAINE_MAPPING: dict[str, str] = {
     "informatique, internet":                        "Informatique & Numérique",
     "matières premières, fabrication, industries":   "Ingénierie & Industrie",
     "mécanique":                                     "Ingénierie & Industrie",
     "électricité, électronique, robotique":          "Ingénierie & Industrie",
+    "armée, sécurité":                               "Ingénierie & Industrie",
     "environnement, énergies, propreté":             "Énergie & Environnement",
     "commerce, marketing, vente":                    "Commerce & Marketing",
     "logistique, transport":                         "Commerce & Marketing",
@@ -109,7 +136,6 @@ MACRO_DOMAINE_MAPPING: dict[str, str] = {
 def build_sous_domaine_to_macro(csv_path: Path) -> dict[str, str]:
     """
     Construit le mapping sous_domaine_web → macro-domaine Onisep depuis le CSV formations.
-    Les deux clés et valeurs sont en minuscules.
     Ex : "informatique (généralités)" → "informatique, internet"
     """
     sous_to_macro: dict[str, str] = {}
@@ -195,19 +221,17 @@ def clean_duree(duree: str | None) -> str | None:
 def parse_formations(
     xml_path: Path,
     sous_to_macro: dict[str, str],
-) -> tuple[list[dict], list[tuple[str, str]]]:
+) -> list[dict]:
     """
-    Parse le XML formations.
-    Retourne :
-        - formations : liste de dicts prêts à insérer
-        - formation_metier_pairs : [(formation_id, metier_id), ...]
+    Parse le XML formations. Retourne une liste de dicts prêts à insérer.
+    Seules les formations bac+2→+5 ayant du contenu (ou un type explicitement
+    accepté sans contenu) sont retenues.
     """
     log.info(f"Parsing formations : {xml_path}")
     tree = etree.parse(str(xml_path))
     root = tree.getroot()
 
     formations = []
-    formation_metier_pairs = []
     skipped_niveau = 0
     skipped_content = 0
     unmapped_sous_domaines: set[str] = set()
@@ -256,19 +280,12 @@ def parse_formations(
                 continue
             sous_domaines_raw.append((sd_id, sd_libelle))
 
-            # Log des sous-domaines non mappables
             sd_key = sd_libelle.lower().strip()
             onisep_macro = sous_to_macro.get(sd_key)
             if not onisep_macro:
                 unmapped_sous_domaines.add(sd_libelle)
             elif map_to_mirai(onisep_macro) is None:
                 unmapped_sous_domaines.add(f"{sd_libelle} (macro: {onisep_macro})")
-
-        # ── Métiers accessibles depuis cette formation ──
-        for metier_elem in elem.findall(".//metiers_formation/metier"):
-            metier_id = get_text(metier_elem, "id")
-            if metier_id:
-                formation_metier_pairs.append((identifiant, metier_id))
 
         formations.append({
             "id": identifiant,
@@ -286,6 +303,7 @@ def parse_formations(
             "attendus": strip_html(get_text(elem, "attendus")),
             "poursuite_etudes": poursuites or None,
             "url": get_text(elem, "url"),
+            "acces_postbac_direct": (type_libelle or "").lower().strip() in TYPES_COL2,
             "sous_domaines": sous_domaines_raw,
         })
 
@@ -299,7 +317,7 @@ def parse_formations(
             f"{sorted(unmapped_sous_domaines)}"
         )
 
-    return formations, formation_metier_pairs
+    return formations
 
 
 # ── Parsing métiers ───────────────────────────────────────────────────────────
@@ -317,32 +335,27 @@ def parse_metiers(xml_path: Path) -> list[dict]:
         if not identifiant:
             continue
 
-        # ── Synonymes ──
         synonymes = [
             get_text(syn, "nom_metier")
             for syn in elem.findall(".//synonymes/synonyme")
             if get_text(syn, "nom_metier")
         ]
 
-        # ── Secteurs d'activité ──
         secteurs = [
             {"id": get_text(sa, "id"), "libelle": get_text(sa, "libelle")}
             for sa in elem.findall(".//secteur_activite")
             if get_text(sa, "id") and get_text(sa, "libelle")
         ]
 
-        # ── Centres d'intérêt ──
         centres = [
             {"id": get_text(ci, "id"), "libelle": get_text(ci, "libelle")}
             for ci in elem.findall(".//centre_interet")
             if get_text(ci, "id") and get_text(ci, "libelle")
         ]
 
-        # ── Niveau accès min ──
         niveau_elem = elem.find("niveau_acces_min")
         niveau_acces_min = get_text(niveau_elem, "libelle") if niveau_elem is not None else None
 
-        # ── Salaire (dans vie_professionnelle) ──
         salaire = None
         vp_raw = get_text(elem, "vie_professionnelle")
         if vp_raw:
@@ -351,7 +364,6 @@ def parse_metiers(xml_path: Path) -> list[dict]:
             if match:
                 salaire = match.group(1).strip()
 
-        # ── Transversalité ──
         transverse_elem = elem.find(".//metier_transverse")
         est_transverse = (
             transverse_elem is not None
@@ -381,6 +393,50 @@ def parse_metiers(xml_path: Path) -> list[dict]:
     return metiers
 
 
+# ── Parsing YAML manuel ───────────────────────────────────────────────────────
+
+def parse_yaml_manuel(yaml_path: Path, existing_ids: set[str]) -> list[dict]:
+    """
+    Charge le fichier YAML de formations manuelles (CPGE, CPI, PASS, LAS, IFSI).
+    Ignore silencieusement les entrées dont l'id est déjà connu.
+    """
+    if not yaml_path.exists():
+        log.warning(f"Fichier YAML manuel introuvable : {yaml_path}")
+        return []
+
+    log.info(f"Parsing YAML manuel : {yaml_path}")
+    with open(yaml_path, encoding="utf-8") as f:
+        entries = yaml.safe_load(f) or []
+
+    formations = []
+    for entry in entries:
+        fid = entry.get("id")
+        if not fid or fid in existing_ids:
+            continue
+        formations.append({
+            "id": fid,
+            "libelle_complet": entry.get("libelle_complet", fid),
+            "libelle_generique": entry.get("libelle_generique"),
+            "libelle_specifique": None,
+            "type_sigle": entry.get("type_sigle"),
+            "type_libelle_court": entry.get("type_sigle"),
+            "type_libelle": entry.get("type_libelle"),
+            "duree": entry.get("duree"),
+            "niveau_etudes": entry.get("niveau_etudes"),
+            "niveau_certification": None,
+            "description_courte": entry.get("description_courte", "").strip() or None,
+            "acces": None,
+            "attendus": None,
+            "poursuite_etudes": entry.get("poursuite_etudes") or None,
+            "url": entry.get("url"),
+            "acces_postbac_direct": entry.get("acces_postbac_direct", False),
+            "mirai_domaines": set(entry.get("domaines", [])),
+        })
+
+    log.info(f"  Formations manuelles retenues : {len(formations)}")
+    return formations
+
+
 # ── Ingestion en base ─────────────────────────────────────────────────────────
 
 def ingest():
@@ -388,26 +444,37 @@ def ingest():
 
     Base.metadata.create_all(bind=engine)
 
+    with engine.connect() as conn:
+        conn.execute(text(
+            "ALTER TABLE formations "
+            "ADD COLUMN IF NOT EXISTS acces_postbac_direct BOOLEAN NOT NULL DEFAULT FALSE"
+        ))
+        conn.execute(text("ALTER TABLE formations ALTER COLUMN id TYPE VARCHAR(40)"))
+        # Suppression de l'ancienne table de liaison formation↔métier (design v1, plus utilisée)
+        conn.execute(text("DROP TABLE IF EXISTS formation_metier CASCADE"))
+        conn.commit()
+    log.info("Migrations OK")
+
     # ── 1. Chargement des mappings CSV ──
     log.info("Chargement des mappings CSV...")
     sous_to_macro = build_sous_domaine_to_macro(CSV_FORMATIONS)
     metier_domaines = load_metier_domaines(CSV_METIERS)
 
-    # ── 2. Parse des XML ──
-    formations_data, fm_pairs = parse_formations(XML_FORMATIONS, sous_to_macro)
+    # ── 2. Parse des sources ──
+    formations_data = parse_formations(XML_FORMATIONS, sous_to_macro)
     metiers_data = parse_metiers(XML_METIERS)
+
+    xml_formation_ids = {fdata["id"] for fdata in formations_data}
+    yaml_manuel = parse_yaml_manuel(YAML_MANUEL, xml_formation_ids)
 
     db = SessionLocal()
     try:
         # ── 3. Purge des données Onisep existantes ──
         log.info("Purge des données Onisep existantes...")
-        # Les favoris référencent formations, métiers et domaines — à supprimer en premier.
-        # Ils seront de toute façon invalides après une réingestion (IDs recréés).
         nb_favoris = db.query(Favori).delete()
         if nb_favoris:
             log.warning(f"  {nb_favoris} favori(s) supprimé(s) (invalidés par la réingestion)")
         db.execute(MetierDomaine.delete())
-        db.execute(FormationMetier.delete())
         db.execute(FormationDomaine.delete())
         db.query(Formation).delete()
         db.query(Metier).delete()
@@ -423,8 +490,8 @@ def ingest():
             domaine_by_libelle[libelle] = d
         db.flush()
 
-        # ── 5. Insertion des formations + liens formation ↔ domaine ──
-        log.info(f"Insertion de {len(formations_data)} formations...")
+        # ── 5. Insertion des formations XML + liens formation ↔ domaine ──
+        log.info(f"Insertion de {len(formations_data)} formations XML...")
         formation_by_id: dict[str, Formation] = {}
         formations_sans_domaine = 0
 
@@ -432,21 +499,29 @@ def ingest():
             sous_domaines = fdata.pop("sous_domaines")
             f = Formation(**fdata)
 
-            mirai_libelles_vus: set[str] = set()
+            # Score par domaine Mirai : nb de sous-domaines pointant vers ce domaine
+            mirai_scores: Counter = Counter()
             for _, sd_libelle in sous_domaines:
-                # Étape 1 : sous_domaine → macro Onisep (depuis CSV)
                 onisep_macro = sous_to_macro.get(sd_libelle.lower().strip())
                 if not onisep_macro:
                     continue
-                # Étape 2 : macro Onisep → domaine Mirai
                 mirai_libelle = map_to_mirai(onisep_macro)
-                if mirai_libelle and mirai_libelle not in mirai_libelles_vus:
-                    domaine_obj = domaine_by_libelle.get(mirai_libelle)
-                    if domaine_obj:
-                        f.domaines.append(domaine_obj)
-                        mirai_libelles_vus.add(mirai_libelle)
+                if mirai_libelle:
+                    mirai_scores[mirai_libelle] += 1
 
-            if not mirai_libelles_vus:
+            # IEP : domaines fixés indépendamment des sous-domaines Onisep
+            # (très généralistes, leurs sous-domaines couvrent jusqu'à 9 domaines Mirai)
+            if (f.type_libelle or "").lower().strip() == "diplôme d'iep":
+                top_domaines = ["Droit", "Sciences Humaines & Langues"]
+            else:
+                top_domaines = [d for d, _ in mirai_scores.most_common(2)]
+
+            for mirai_libelle in top_domaines:
+                domaine_obj = domaine_by_libelle.get(mirai_libelle)
+                if domaine_obj:
+                    f.domaines.append(domaine_obj)
+
+            if not f.domaines:
                 formations_sans_domaine += 1
 
             db.add(f)
@@ -455,6 +530,19 @@ def ingest():
         db.flush()
         if formations_sans_domaine:
             log.warning(f"  Formations sans domaine (hors scope) : {formations_sans_domaine}")
+
+        # ── 5b. Insertion des formations YAML manuelles ──
+        log.info(f"Insertion de {len(yaml_manuel)} formations manuelles (CPGE/CPI/PASS/LAS/IFSI)...")
+        for fdata in yaml_manuel:
+            mirai_domaines = fdata.pop("mirai_domaines")
+            f = Formation(**fdata)
+            for mirai_libelle in mirai_domaines:
+                domaine_obj = domaine_by_libelle.get(mirai_libelle)
+                if domaine_obj:
+                    f.domaines.append(domaine_obj)
+            db.add(f)
+            formation_by_id[f.id] = f
+        db.flush()
 
         # ── 6. Insertion des métiers ──
         log.info(f"Insertion de {len(metiers_data)} métiers...")
@@ -465,23 +553,7 @@ def ingest():
             metier_by_id[m.id] = m
         db.flush()
 
-        # ── 7. Liens formation ↔ métier ──
-        log.info(f"Création des liens formation↔métier ({len(fm_pairs)} paires brutes)...")
-        seen_pairs: set[tuple[str, str]] = set()
-        nb_liens_fm = 0
-        for formation_id, metier_id in fm_pairs:
-            pair = (formation_id, metier_id)
-            if pair in seen_pairs:
-                continue
-            seen_pairs.add(pair)
-            formation = formation_by_id.get(formation_id)
-            metier = metier_by_id.get(metier_id)
-            if formation and metier:
-                formation.metiers.append(metier)
-                nb_liens_fm += 1
-        log.info(f"  Liens formation↔métier créés : {nb_liens_fm}")
-
-        # ── 8. Liens métier ↔ domaine (depuis CSV) ──
+        # ── 7. Liens métier ↔ domaine (depuis CSV) ──
         log.info("Création des liens métier↔domaine depuis le CSV...")
         nb_liens_md = 0
         metiers_sans_domaine = 0

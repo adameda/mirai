@@ -5,7 +5,7 @@ import { T } from "../constants/theme";
 import { useAppState } from "../hooks/useAppState";
 
 export default function Favoris() {
-  const { savedItems, saveItem, removeItem, setPage } = useAppState();
+  const { savedItems, saveItem, removeItem, openChat } = useAppState();
   const [detailItem, setDetailItem] = useState(null);
   const domaines = savedItems.filter((i) => i.type === "domaine");
   const formations = savedItems.filter((i) => i.type === "formation");
@@ -60,7 +60,7 @@ export default function Favoris() {
 
   return (
     <div style={{ flex: 1, overflowY: "auto", padding: "40px 48px", background: T.bg, fontFamily: "'DM Sans',sans-serif" }}>
-      {detailItem && <DetailPanel item={detailItem} onClose={() => setDetailItem(null)} onSave={saveItem} onRemove={removeItem} savedItems={savedItems} onAskMirai={() => setPage("chatbot")} />}
+      {detailItem && <DetailPanel item={detailItem} onClose={() => setDetailItem(null)} onSave={saveItem} onRemove={removeItem} savedItems={savedItems} onAskMirai={(item) => openChat(item)} />}
       <div style={{ marginBottom: 28 }}>
         <h1 style={{ margin: "0 0 4px", fontSize: 26, fontWeight: 800, color: T.text, letterSpacing: "-0.03em" }}>Mes favoris</h1>
         <p style={{ margin: 0, fontSize: 14, color: T.muted }}>Domaines, formations et métiers que tu as sauvegardés en favoris.</p>

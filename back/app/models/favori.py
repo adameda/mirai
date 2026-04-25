@@ -22,8 +22,8 @@ class Favori(Base):
 
     # Une seule FK est non-nulle selon le type
     domaine_id = Column(Integer, ForeignKey("domaines.id"), nullable=True)
-    formation_id = Column(String(20), ForeignKey("formations.id"), nullable=True)
-    metier_id = Column(String(20), ForeignKey("metiers.id"), nullable=True)
+    formation_id = Column(String(40), ForeignKey("formations.id"), nullable=True)
+    metier_id = Column(String(40), ForeignKey("metiers.id"), nullable=True)
 
     __table_args__ = (
         # Exactement une FK doit être non-nulle

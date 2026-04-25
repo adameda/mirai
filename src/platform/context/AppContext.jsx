@@ -69,6 +69,7 @@ export function AppProvider({ children }) {
   const [config,     setConfig]     = useState(initial.config);
   const [loading,    setLoading]    = useState(true);   // true le temps de restaurer la session
   const [authError,  setAuthError]  = useState(null);
+  const [chatContext, setChatContext] = useState(null); // { type, refId, label } | null
 
   // ── Restauration de session au montage ─────────────────────────────────
   useEffect(() => {
@@ -212,6 +213,12 @@ export function AppProvider({ children }) {
     }
   }, []);
 
+  // ── Chat ──────────────────────────────────────────────────────────────
+  const openChat = useCallback((item) => {
+    setChatContext({ type: item.type, refId: item.refId || item.id, label: item.label || item.nom || item.libelle_complet });
+    setPage("chatbot");
+  }, []);
+
   // ── Logout ─────────────────────────────────────────────────────────────
   const logout = useCallback(() => {
     localStorage.removeItem('mirai_token');
@@ -251,10 +258,13 @@ export function AppProvider({ children }) {
     startOnboarding,
     completeOnboarding,
     logout,
+    chatContext, setChatContext,
+    openChat,
   }), [
     screen, authMode, user, answers, onboarded, page, savedItems, config,
     loading, authError, isProf, locked,
     saveItem, removeItem, saveConfig, completeAuth, startOnboarding, completeOnboarding, logout,
+    chatContext, openChat,
   ]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

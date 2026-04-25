@@ -14,8 +14,6 @@ from app.schemas.onisep import (
     MetierShort,
     MetierDetail,
     TypeFormationOut,
-    MetierRefOut,
-    FormationRefOut,
     SecteurOut,
 )
 
@@ -50,6 +48,8 @@ def _formation_to_short(f: Formation) -> FormationShort:
         niveau_etudes=f.niveau_etudes,
         domaines=_domaines_out(f.domaines),
         description_courte=f.description_courte,
+        acces_postbac_direct=f.acces_postbac_direct,
+        url=f.url,
     )
 
 
@@ -68,15 +68,6 @@ def _formation_to_detail(f: Formation) -> FormationDetail:
         acces=f.acces,
         attendus=f.attendus,
         poursuite_etudes=f.poursuite_etudes,
-        metiers=[
-            MetierRefOut(
-                id=m.id,
-                nom=m.nom,
-                libelle_feminin=m.libelle_feminin,
-                libelle_masculin=m.libelle_masculin,
-            )
-            for m in f.metiers
-        ],
         url=f.url,
     )
 
@@ -110,20 +101,17 @@ def _metier_to_detail(m: Metier) -> MetierDetail:
         competences=m.competences,
         nature_travail=m.nature_travail,
         condition_travail=m.condition_travail,
-        formations=[
-            FormationRefOut(id=f.id, libelle_complet=f.libelle_complet)
-            for f in m.formations
-        ],
     )
 
 
 # ── Domaines ──────────────────────────────────────────────────────────────────
 
 def get_all_domaines(db: Session) -> list[DomaineOut]:
-    """Retourne tous les domaines avec le compte de formations et de métiers associés."""
+    """Retourne tous les domaines avec le compte de formations col2 et de métiers associés."""
     formation_counts = dict(
         db.query(Domaine.id, func.count(Formation.id))
         .outerjoin(Domaine.formations)
+        .filter(Formation.acces_postbac_direct.is_(True))
         .group_by(Domaine.id)
         .all()
     )
@@ -153,11 +141,14 @@ def get_formations(
     domaine_id: int | None = None,
     type_sigle: str | None = None,
     niveau_etudes: str | None = None,
+    postbac_direct_only: bool = True,
 ) -> list[FormationShort]:
     query = (
         db.query(Formation)
         .options(selectinload(Formation.domaines))
     )
+    if postbac_direct_only:
+        query = query.filter(Formation.acces_postbac_direct.is_(True))
     if domaine_id:
         query = query.join(Formation.domaines).filter(Domaine.id == domaine_id)
     if type_sigle:
@@ -171,10 +162,7 @@ def get_formations(
 def get_formation_by_id(db: Session, formation_id: str) -> FormationDetail | None:
     f = (
         db.query(Formation)
-        .options(
-            selectinload(Formation.domaines),
-            selectinload(Formation.metiers),
-        )
+        .options(selectinload(Formation.domaines))
         .filter(Formation.id == formation_id)
         .first()
     )
@@ -187,20 +175,13 @@ def get_formation_by_id(db: Session, formation_id: str) -> FormationDetail | Non
 
 def get_metiers(
     db: Session,
-    formation_id: str | None = None,
     domaine_id: int | None = None,
     niveau_acces_min: str | None = None,
 ) -> list[MetierShort]:
-    """
-    Liste les métiers avec filtres optionnels.
-    formation_id et domaine_id sont exclusifs : si les deux sont fournis,
-    formation_id est prioritaire.
-    """
+    """Liste les métiers filtrés par domaine et/ou niveau d'accès minimum."""
     query = db.query(Metier)
 
-    if formation_id:
-        query = query.join(Metier.formations).filter(Formation.id == formation_id)
-    elif domaine_id:
+    if domaine_id:
         query = query.join(Metier.domaines).filter(Domaine.id == domaine_id)
 
     if niveau_acces_min:
@@ -212,7 +193,6 @@ def get_metiers(
 def get_metier_by_id(db: Session, metier_id: str) -> MetierDetail | None:
     m = (
         db.query(Metier)
-        .options(selectinload(Metier.formations))
         .filter(Metier.id == metier_id)
         .first()
     )
