@@ -8,6 +8,7 @@ RUN npm ci
 
 COPY index.html ./
 COPY src/ ./src/
+COPY public/ ./public/
 COPY vite.config.js ./
 
 RUN npm run build
