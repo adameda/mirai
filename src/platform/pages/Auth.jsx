@@ -5,7 +5,7 @@ import GradText from "../components/GradText";
 import { T, grad, gradSoft } from "../constants/theme";
 import { useAppState } from "../hooks/useAppState";
 
-export default function Auth({ mode, onComplete, onToggle }) {
+export default function Auth({ mode, onComplete, onToggle, onBack }) {
   const { authError, setAuthError } = useAppState();
 
   const [role,       setRole]       = useState("eleve");
@@ -38,8 +38,13 @@ export default function Auth({ mode, onComplete, onToggle }) {
 
   return (
     <div style={{ minHeight: "100vh", background: T.bg, fontFamily: "'DM Sans',sans-serif", display: "flex", flexDirection: "column" }}>
-      <nav style={{ padding: "20px 64px", borderBottom: `1px solid ${T.border}`, background: T.white }}>
+      <nav style={{ padding: "20px 64px", borderBottom: `1px solid ${T.border}`, background: T.white, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <Logo size={22} />
+        {onBack && (
+          <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, color: T.muted, fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", gap: 6 }}>
+            ← Retour
+          </button>
+        )}
       </nav>
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "48px" }}>
         <div style={{ width: "100%", maxWidth: 420 }}>

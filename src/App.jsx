@@ -38,7 +38,7 @@ function AppShell() {
   }
 
   if (screen === "auth") {
-    return <Auth mode={authMode} onComplete={completeAuth} onToggle={() => setAuthMode((m) => (m === "signup" ? "login" : "signup"))} />;
+    return <Auth mode={authMode} onComplete={completeAuth} onToggle={() => setAuthMode((m) => (m === "signup" ? "login" : "signup"))} onBack={() => setScreen("landing")} />;
   }
 
   if (screen === "onboarding") {

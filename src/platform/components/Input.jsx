@@ -10,6 +10,8 @@ export default function Input({ label, type = "text", placeholder, value, onChan
         value={value}
         onChange={onChange}
         style={{
+          width: "100%",
+          boxSizing: "border-box",
           padding: "12px 16px",
           borderRadius: 12,
           border: `1.5px solid ${T.border}`,
