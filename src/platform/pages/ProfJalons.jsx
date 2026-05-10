@@ -3,6 +3,18 @@ import Input from "../components/Input";
 import { T, grad } from "../constants/theme";
 import { useAppState } from "../hooks/useAppState";
 
+function Row({ num, title, children, withBorder }) {
+  return (
+    <div style={{ padding: "20px 24px", borderTop: withBorder ? `1px solid ${T.border}` : "none" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+        <div style={{ width: 30, height: 30, borderRadius: 9, background: grad, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "white", fontWeight: 800 }}>{num}</div>
+        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: T.text }}>{title}</h3>
+      </div>
+      {children}
+    </div>
+  );
+}
+
 export default function ProfJalons() {
   const { config, saveConfig } = useAppState();
   const [local,    setLocal]   = useState({ ...config });
@@ -29,16 +41,6 @@ export default function ProfJalons() {
       setSaving(false);
     }
   }
-
-  const Row = ({ num, title, children, withBorder }) => (
-    <div style={{ padding: "20px 24px", borderTop: withBorder ? `1px solid ${T.border}` : "none" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 30, height: 30, borderRadius: 9, background: grad, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, color: "white", fontWeight: 800 }}>{num}</div>
-        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: T.text }}>{title}</h3>
-      </div>
-      {children}
-    </div>
-  );
 
   return (
     <div style={{ flex: 1, overflowY: "auto", padding: "40px 48px", background: T.bg, fontFamily: "'DM Sans',sans-serif" }}>

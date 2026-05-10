@@ -184,9 +184,9 @@ export default function Exploration() {
 
   const activeColor = mode === "formations" ? C.formations : C.metiers;
 
-  // ── Render domaines list (partagé desktop/mobile) ─────────────────────────
+  // ── JSX partagé (fonctions de rendu, pas des composants React) ──────────────
 
-  const DomainesList = () => (
+  const renderDomaines = () => (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       {domainesList.map(d => {
         const isActive = selDomaine?.id === d.id;
@@ -214,9 +214,7 @@ export default function Exploration() {
     </div>
   );
 
-  // ── Render contenu (formations/métiers) ───────────────────────────────────
-
-  const ContentArea = () => (
+  const renderContent = () => (
     <>
       <ColHeader
         label={mode === "formations" ? "Formations post-bac" : "Métiers"}
@@ -320,11 +318,11 @@ export default function Exploration() {
           {!selDomaine ? (
             <div style={{ flex: 1, overflowY: "auto", paddingBottom: 32 }}>
               <ColHeader label="Domaines" color={C.domaines} active={true} />
-              <DomainesList />
+              {renderDomaines()}
             </div>
           ) : (
             <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-              <ContentArea />
+              {renderContent()}
             </div>
           )}
         </div>
@@ -334,12 +332,12 @@ export default function Exploration() {
           <div style={{ width: 240, flexShrink: 0, display: "flex", flexDirection: "column", paddingRight: 16 }}>
             <div style={{ flex: 1, overflowY: "auto", paddingBottom: 32 }}>
               <ColHeader label="Domaines" color={C.domaines} active={true} />
-              <DomainesList />
+              {renderDomaines()}
             </div>
           </div>
           <div style={{ width: 1, background: selDomaine ? `${activeColor}30` : T.border, flexShrink: 0, transition: "background 0.4s", margin: "0 16px" }} />
           <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", paddingRight: 32 }}>
-            <ContentArea />
+            {renderContent()}
           </div>
         </div>
       )}
