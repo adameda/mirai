@@ -16,10 +16,16 @@ export async function getMe() {
 
 export async function postOnboarding(answers) {
   return api.post('/me/onboarding', {
-    niveau:            answers.niveau?.[0]  || null,
-    matieres:          answers.matieres     || [],
-    style:             answers.style        || [],
-    duree:             answers.duree?.[0]   || null,
-    domaines_interets: answers.domaines     || [],
+    niveau:              answers.niveau?.[0]              || null,
+    voie:                answers.voie?.[0]                || null,
+    filiere:             answers.filiere?.[0]             || null,
+    specialites:         answers.specialites              || [],
+    matieres_fortes:     answers.matieres_fortes          || [],
+    matieres_aimees:     answers.matieres_aimees          || [],
+    centres_interet:     answers.centres_interet          || [],
+    style:               answers.style                    || [],
+    duree:               answers.duree?.[0]               || null,
+    domaines_interets:   answers.domaines_interets        || [],
+    pression_academique: answers.pression_academique?.[0] || null,
   });
 }

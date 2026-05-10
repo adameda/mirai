@@ -53,8 +53,25 @@ function MsgText({ text }) {
 
 // ── Composant principal ───────────────────────────────────────────────────────
 
+function buildProfile(answers) {
+  if (!answers || Object.keys(answers).length === 0) return null;
+  return {
+    niveau:              answers.niveau?.[0]         || null,
+    voie:                answers.voie?.[0]           || null,
+    filiere:             answers.filiere?.[0]        || null,
+    specialites:         answers.specialites         || [],
+    matieres_fortes:     answers.matieres_fortes     || [],
+    matieres_aimees:     answers.matieres_aimees     || [],
+    centres_interet:     answers.centres_interet     || [],
+    domaines_interets:   answers.domaines_interets   || [],
+    duree:               answers.duree?.[0]          || null,
+    pression_academique: answers.pression_academique?.[0] || null,
+    style:               answers.style               || [],
+  };
+}
+
 export default function Chatbot() {
-  const { user, chatContext, setChatContext } = useAppState();
+  const { user, answers, chatContext, setChatContext } = useAppState();
 
   const [histories, setHistories]       = useState(loadHistories);
   const [activeChannel, setActiveChannel] = useState("general");
@@ -143,7 +160,12 @@ export default function Chatbot() {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ messages: allMessages, context_type: type || null, context_id: id || null }),
+        body: JSON.stringify({
+          messages: allMessages,
+          context_type: type || null,
+          context_id: id || null,
+          profile: buildProfile(answers),
+        }),
         signal: ctrl.signal,
       });
 

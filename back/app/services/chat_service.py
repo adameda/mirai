@@ -1,8 +1,8 @@
 """
-Service de chat — streaming Gemini 2.0 Flash via SSE.
+Service de chat — streaming Gemini 2.5 Flash via SSE.
 """
 import json
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
 import google.generativeai as genai
 from sqlalchemy.orm import Session
@@ -20,37 +20,119 @@ _SYSTEM_BASE = (
 )
 
 
-def _system_prompt(context_type: str | None, context_id: str | None, db: Session) -> str:
+def _profile_block(profile: dict) -> str:
+    """Construit le bloc profil élève à injecter dans le system prompt."""
+    if not profile:
+        return ""
+
+    lines = ["\n\nProfil de l'élève qui te parle :"]
+
+    if profile.get("niveau"):
+        voie = profile.get("voie")
+        filiere = profile.get("filiere")
+        niveau_str = profile["niveau"]
+        if voie:
+            niveau_str += f" — voie {voie}"
+        if filiere:
+            niveau_str += f" ({filiere})"
+        lines.append(f"- Classe : {niveau_str}")
+
+    if profile.get("specialites"):
+        lines.append(f"- Spécialités : {', '.join(profile['specialites'])}")
+
+    if profile.get("matieres_fortes"):
+        lines.append(f"- Matières où il/elle est fort(e) : {', '.join(profile['matieres_fortes'])}")
+
+    if profile.get("matieres_aimees"):
+        lines.append(f"- Matières qu'il/elle aime : {', '.join(profile['matieres_aimees'])}")
+
+    if profile.get("centres_interet"):
+        lines.append(f"- Ce qui le/la motive : {', '.join(profile['centres_interet'])}")
+
+    if profile.get("domaines_interets"):
+        lines.append(f"- Domaines d'intérêt : {', '.join(profile['domaines_interets'])}")
+
+    if profile.get("duree"):
+        lines.append(f"- Durée d'études souhaitée : {profile['duree']}")
+
+    if profile.get("pression_academique"):
+        lines.append(f"- Rapport à l'école : {profile['pression_academique']}")
+
+    if profile.get("style"):
+        lines.append(f"- Style de travail : {', '.join(profile['style'])}")
+
+    lines.append(
+        "\nUtilise ce profil pour personnaliser tes réponses. "
+        "Si l'élève te demande si quelque chose lui convient, appuie-toi sur ces informations."
+    )
+
+    return "\n".join(lines)
+
+
+def _system_prompt(
+    context_type: str | None,
+    context_id: str | None,
+    db: Session,
+    profile: Optional[dict] = None,
+) -> str:
+    profile_block = _profile_block(profile or {})
+
     if context_type == "formation" and context_id:
         f = db.query(Formation).filter(Formation.id == context_id).first()
         if f:
-            return (
-                _SYSTEM_BASE
-                + "\n\nLe lycéen explore la formation suivante :"
-                f"\n- Intitulé : {f.libelle_complet}"
-                f"\n- Type : {f.type_sigle or ''} ({f.type_libelle or ''})"
-                f"\n- Durée : {f.duree or 'non précisée'}"
-                f"\n- Niveau : {f.niveau_etudes or 'non précisé'}"
-                f"\n- Description : {f.description_courte or 'non disponible'}"
-                "\n\nAide-le à comprendre cette formation, son accès, ses débouchés et si elle lui convient."
+            parts = [
+                _SYSTEM_BASE,
+                profile_block,
+                "\n\nLe lycéen explore la formation suivante :",
+                f"- Intitulé : {f.libelle_complet}",
+                f"- Type : {f.type_sigle or ''} ({f.type_libelle or ''})",
+                f"- Durée : {f.duree or 'non précisée'}",
+                f"- Niveau : {f.niveau_etudes or 'non précisé'}",
+            ]
+            if f.description_courte:
+                parts.append(f"- Description : {f.description_courte}")
+            if f.acces:
+                parts.append(f"- Conditions d'accès : {f.acces[:600]}")
+            if f.attendus:
+                parts.append(f"- Compétences attendues : {f.attendus[:600]}")
+            parts.append(
+                "\nAide-le à comprendre cette formation, son accès, ses débouchés "
+                "et si elle correspond à son profil."
             )
+            return "\n".join(parts)
 
     if context_type == "metier" and context_id:
         m = db.query(Metier).filter(Metier.id == context_id).first()
         if m:
             secteurs = ", ".join(s["libelle"] for s in (m.secteurs_activite or []))
-            return (
-                _SYSTEM_BASE
-                + "\n\nLe lycéen explore le métier suivant :"
-                f"\n- Nom : {m.nom}"
-                f"\n- Secteur(s) : {secteurs or 'non précisés'}"
-                f"\n- Niveau d'accès minimum : {m.niveau_acces_min or 'non précisé'}"
-                f"\n- Salaire débutant : {m.salaire_debutant or 'non précisé'}"
-                f"\n- Description : {m.accroche or 'non disponible'}"
-                "\n\nAide-le à comprendre ce métier, les formations qui y mènent et s'il correspond à son profil."
-            )
+            centres = ", ".join(ci["libelle"] for ci in (m.centres_interet or []))
 
-    return _SYSTEM_BASE
+            parts = [
+                _SYSTEM_BASE,
+                profile_block,
+                "\n\nLe lycéen explore le métier suivant :",
+                f"- Nom : {m.nom}",
+                f"- Secteur(s) : {secteurs or 'non précisés'}",
+                f"- Niveau d'accès minimum : {m.niveau_acces_min or 'non précisé'}",
+                f"- Salaire débutant : {m.salaire_debutant or 'non précisé'}",
+            ]
+            if m.format_court:
+                parts.append(f"- En quoi ça consiste : {m.format_court[:600]}")
+            elif m.accroche:
+                parts.append(f"- Description : {m.accroche}")
+            if centres:
+                parts.append(f"- Ce métier correspond à des personnes qui : {centres}")
+            if m.nature_travail:
+                parts.append(f"- Nature du travail : {m.nature_travail[:400]}")
+            if m.condition_travail:
+                parts.append(f"- Conditions de travail : {m.condition_travail[:400]}")
+            parts.append(
+                "\nAide-le à comprendre ce métier, les formations qui y mènent "
+                "et s'il correspond à son profil."
+            )
+            return "\n".join(parts)
+
+    return _SYSTEM_BASE + profile_block
 
 
 async def stream_chat(
@@ -58,8 +140,9 @@ async def stream_chat(
     context_type: str | None,
     context_id: str | None,
     db: Session,
+    profile: Optional[dict] = None,
 ) -> AsyncGenerator[str, None]:
-    system = _system_prompt(context_type, context_id, db)
+    system = _system_prompt(context_type, context_id, db, profile)
 
     model = genai.GenerativeModel(
         model_name="gemini-2.5-flash",

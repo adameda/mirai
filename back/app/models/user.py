@@ -26,10 +26,20 @@ class OnboardingAnswer(Base):
     id      = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True)
 
+    # Champs existants (conservés)
     niveau            = Column(String(30), nullable=True)
-    matieres          = Column(JSON,       nullable=True)
+    matieres          = Column(JSON,       nullable=True)  # ancien champ, conservé
     style             = Column(JSON,       nullable=True)
     duree             = Column(String(40), nullable=True)
     domaines_interets = Column(JSON,       nullable=True)
+
+    # Nouveaux champs
+    voie                = Column(String(20),  nullable=True)   # "generale" | "technologique"
+    filiere             = Column(String(20),  nullable=True)   # "STMG", "STI2D", etc.
+    specialites         = Column(JSON,        nullable=True)   # ["Maths", "NSI"]
+    matieres_fortes     = Column(JSON,        nullable=True)   # ["Maths", "Informatique"]
+    matieres_aimees     = Column(JSON,        nullable=True)   # ["SES", "Maths"]
+    centres_interet     = Column(JSON,        nullable=True)   # ["j'aime jongler avec les chiffres", ...]
+    pression_academique = Column(String(100), nullable=True)
 
     user = relationship("User", back_populates="onboarding")

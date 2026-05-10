@@ -15,13 +15,14 @@ class ChatRequest(BaseModel):
     messages: list[dict]
     context_type: Optional[str] = None
     context_id: Optional[str] = None
+    profile: Optional[dict] = None
 
 
 @router.post("/stream")
 @limiter.limit("10/minute")
 async def chat_stream(request: Request, body: ChatRequest, db: Session = Depends(get_db)):
     return StreamingResponse(
-        chat_service.stream_chat(body.messages, body.context_type, body.context_id, db),
+        chat_service.stream_chat(body.messages, body.context_type, body.context_id, db, body.profile),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

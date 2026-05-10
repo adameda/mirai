@@ -62,10 +62,16 @@ class UserOut(BaseModel):
 
 class OnboardingIn(BaseModel):
     niveau: Optional[str] = None
-    matieres: Optional[list[str]] = None
+    voie: Optional[str] = None                      # "generale" | "technologique"
+    filiere: Optional[str] = None                   # "STMG", "STI2D", etc.
+    specialites: Optional[list[str]] = None
+    matieres_fortes: Optional[list[str]] = None
+    matieres_aimees: Optional[list[str]] = None
+    centres_interet: Optional[list[str]] = None     # libellés affichés à l'élève
     style: Optional[list[str]] = None
     duree: Optional[str] = None
     domaines_interets: Optional[list[str]] = None
+    pression_academique: Optional[str] = None
 
 
 class OnboardingOut(BaseModel):

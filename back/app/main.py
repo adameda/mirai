@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.core.database import engine
 from app.core.limiter import limiter
 from app.models import Base  # importe tous les modèles avant create_all
+from sqlalchemy import text
 
 
 SECURITY_HEADERS = {
@@ -35,6 +36,19 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    with engine.connect() as conn:
+        migrations = [
+            "ALTER TABLE onboarding_answers ADD COLUMN IF NOT EXISTS voie VARCHAR(20)",
+            "ALTER TABLE onboarding_answers ADD COLUMN IF NOT EXISTS filiere VARCHAR(20)",
+            "ALTER TABLE onboarding_answers ADD COLUMN IF NOT EXISTS specialites JSON",
+            "ALTER TABLE onboarding_answers ADD COLUMN IF NOT EXISTS matieres_fortes JSON",
+            "ALTER TABLE onboarding_answers ADD COLUMN IF NOT EXISTS matieres_aimees JSON",
+            "ALTER TABLE onboarding_answers ADD COLUMN IF NOT EXISTS centres_interet JSON",
+            "ALTER TABLE onboarding_answers ADD COLUMN IF NOT EXISTS pression_academique VARCHAR(100)",
+        ]
+        for migration in migrations:
+            conn.execute(text(migration))
+        conn.commit()
     yield
 
 

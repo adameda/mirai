@@ -150,19 +150,31 @@ def save_onboarding(db: Session, user: User, data: OnboardingIn) -> OnboardingOu
 
     existing = db.query(OnboardingAnswer).filter(OnboardingAnswer.user_id == user.id).first()
     if existing:
-        existing.niveau           = data.niveau
-        existing.matieres         = data.matieres
-        existing.style            = data.style
-        existing.duree            = data.duree
-        existing.domaines_interets = data.domaines_interets
+        existing.niveau              = data.niveau
+        existing.voie                = data.voie
+        existing.filiere             = data.filiere
+        existing.specialites         = data.specialites
+        existing.matieres_fortes     = data.matieres_fortes
+        existing.matieres_aimees     = data.matieres_aimees
+        existing.centres_interet     = data.centres_interet
+        existing.style               = data.style
+        existing.duree               = data.duree
+        existing.domaines_interets   = data.domaines_interets
+        existing.pression_academique = data.pression_academique
     else:
         db.add(OnboardingAnswer(
             user_id=user.id,
             niveau=data.niveau,
-            matieres=data.matieres,
+            voie=data.voie,
+            filiere=data.filiere,
+            specialites=data.specialites,
+            matieres_fortes=data.matieres_fortes,
+            matieres_aimees=data.matieres_aimees,
+            centres_interet=data.centres_interet,
             style=data.style,
             duree=data.duree,
             domaines_interets=data.domaines_interets,
+            pression_academique=data.pression_academique,
         ))
 
     user.onboarded = True
