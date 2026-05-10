@@ -3,10 +3,13 @@ import Badge from "../components/Badge";
 import DetailPanel from "../components/DetailPanel";
 import { T } from "../constants/theme";
 import { useAppState } from "../hooks/useAppState";
+import { useMobile } from "../hooks/useMobile";
 
 export default function Favoris() {
   const { savedItems, saveItem, removeItem, openChat } = useAppState();
   const [detailItem, setDetailItem] = useState(null);
+  const isMobile = useMobile();
+
   const domaines = savedItems.filter((i) => i.type === "domaine");
   const formations = savedItems.filter((i) => i.type === "formation");
   const metiers = savedItems.filter((i) => i.type === "metier");
@@ -23,13 +26,13 @@ export default function Favoris() {
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {items.map((item) => (
-            <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 18px", background: T.white, borderRadius: 14, border: `1px solid ${T.border}`, boxShadow: "0 1px 6px rgba(15,31,61,0.04)" }}>
+            <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", background: T.white, borderRadius: 14, border: `1px solid ${T.border}`, boxShadow: "0 1px 6px rgba(15,31,61,0.04)" }}>
               <span style={{ fontSize: 14, color: T.orange, flexShrink: 0 }}>◆</span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: T.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.label}</p>
+                <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.label}</p>
                 {item.parent && <p style={{ margin: "2px 0 0", fontSize: 11, color: T.muted }}>{item.parent}</p>}
               </div>
-              {canDetail && (
+              {canDetail && !isMobile && (
                 <button
                   onClick={() =>
                     setDetailItem(
@@ -59,11 +62,11 @@ export default function Favoris() {
   );
 
   return (
-    <div style={{ flex: 1, overflowY: "auto", padding: "40px 48px", background: T.bg, fontFamily: "'DM Sans',sans-serif" }}>
+    <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "20px 16px" : "40px 48px", background: T.bg, fontFamily: "'DM Sans',sans-serif" }}>
       {detailItem && <DetailPanel item={detailItem} onClose={() => setDetailItem(null)} onSave={saveItem} onRemove={removeItem} savedItems={savedItems} onAskMirai={(item) => openChat(item)} />}
-      <div style={{ marginBottom: 28 }}>
-        <h1 style={{ margin: "0 0 4px", fontSize: 26, fontWeight: 800, color: T.text, letterSpacing: "-0.03em" }}>Mes favoris</h1>
-        <p style={{ margin: 0, fontSize: 14, color: T.muted }}>Domaines, formations et métiers que tu as sauvegardés en favoris.</p>
+      <div style={{ marginBottom: 24 }}>
+        <h1 style={{ margin: "0 0 4px", fontSize: isMobile ? 22 : 26, fontWeight: 800, color: T.text, letterSpacing: "-0.03em" }}>Mes favoris</h1>
+        <p style={{ margin: 0, fontSize: 13, color: T.muted }}>Domaines, formations et métiers sauvegardés.</p>
       </div>
       <Section title="Domaines" sym="◉" items={domaines} type="domaine" canDetail={false} />
       <Section title="Formations" sym="◇" items={formations} type="formation" canDetail />

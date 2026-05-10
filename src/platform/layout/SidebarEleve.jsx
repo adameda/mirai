@@ -2,13 +2,35 @@ import Logo from "../components/Logo";
 import { NAV_ELEVE, T, grad } from "../constants/theme";
 import { useAppState } from "../hooks/useAppState";
 
-export default function SidebarEleve() {
+export default function SidebarEleve({ mobile = false, onClose }) {
   const { page, setPage, user, locked, logout } = useAppState();
 
+  const handleNav = (id) => {
+    setPage(id);
+    if (mobile && onClose) onClose();
+  };
+
   return (
-    <aside style={{ width: 220, flexShrink: 0, background: T.navyMid, display: "flex", flexDirection: "column", padding: "28px 0", height: "100%" }}>
-      <div style={{ padding: "0 24px 32px" }}>
+    <aside style={{
+      width: 220,
+      flexShrink: 0,
+      background: T.navyMid,
+      display: "flex",
+      flexDirection: "column",
+      padding: "28px 0",
+      height: "100%",
+      ...(mobile ? { position: "fixed", top: 0, left: 0, height: "100vh", zIndex: 1000 } : {}),
+    }}>
+      <div style={{ padding: "0 24px 32px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <Logo size={22} dark />
+        {mobile && (
+          <button
+            onClick={onClose}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.6)", fontSize: 18, padding: 0, lineHeight: 1 }}
+          >
+            ✕
+          </button>
+        )}
       </div>
       <nav style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, padding: "0 12px" }}>
         {NAV_ELEVE.map((n) => {
@@ -17,7 +39,7 @@ export default function SidebarEleve() {
           return (
             <div
               key={n.id}
-              onClick={() => !isLocked && setPage(n.id)}
+              onClick={() => !isLocked && handleNav(n.id)}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -43,21 +65,7 @@ export default function SidebarEleve() {
       </nav>
       <div style={{ margin: "0 12px 10px", padding: "14px", borderRadius: 16, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div
-            style={{
-              width: 34,
-              height: 34,
-              borderRadius: 10,
-              background: grad,
-              flexShrink: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 14,
-              fontWeight: 800,
-              color: "white",
-            }}
-          >
+          <div style={{ width: 34, height: 34, borderRadius: 10, background: grad, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 800, color: "white" }}>
             {user.prenom[0]}
           </div>
           <div style={{ minWidth: 0 }}>
@@ -70,18 +78,7 @@ export default function SidebarEleve() {
         <button
           type="button"
           onClick={logout}
-          style={{
-            width: "100%",
-            padding: "11px 14px",
-            borderRadius: 14,
-            border: "1px solid rgba(255,255,255,0.08)",
-            background: "rgba(255,255,255,0.04)",
-            color: "rgba(255,255,255,0.82)",
-            fontSize: 13,
-            fontWeight: 700,
-            cursor: "pointer",
-            fontFamily: "'DM Sans',sans-serif",
-          }}
+          style={{ width: "100%", padding: "11px 14px", borderRadius: 14, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.82)", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "'DM Sans',sans-serif" }}
         >
           Se déconnecter
         </button>

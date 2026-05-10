@@ -8,6 +8,7 @@ import {
 } from "../services/explorationService";
 import { T, grad, gradSoft } from "../constants/theme";
 import { useAppState } from "../hooks/useAppState";
+import { useMobile } from "../hooks/useMobile";
 
 // ── Constantes ───────────────────────────────────────────────────────────────
 
@@ -98,8 +99,9 @@ const ColHeader = ({ label, count, color, active }) => (
 
 export default function Exploration() {
   const { answers, savedItems, saveItem, removeItem, openChat, setPage } = useAppState();
+  const isMobile = useMobile();
 
-  const [mode,       setMode]       = useState("formations"); // "formations" | "metiers"
+  const [mode,       setMode]       = useState("formations");
   const [selDomaine, setSelDomaine] = useState(null);
   const [items,      setItems]      = useState([]);
   const [loading,    setLoading]    = useState(false);
@@ -108,13 +110,11 @@ export default function Exploration() {
   const [familyFilter, setFamilyFilter] = useState("Tous");
   const [search, setSearch] = useState("");
 
-  // ── Chargement initial des domaines ──
   useEffect(() => {
     getSuggestedDomaines(answers?.domaines).then(setSuggested);
     getAllDomaines().then(setAllDomaines);
   }, [answers]);
 
-  // ── Chargement des items quand domaine ou mode change ──
   useEffect(() => {
     if (!selDomaine) { setItems([]); return; }
     setLoading(true);
@@ -124,8 +124,6 @@ export default function Exploration() {
       : getMetiersByDomaine(selDomaine.id);
     fetch.then(setItems).finally(() => setLoading(false));
   }, [selDomaine, mode]);
-
-  // ── Handlers ─────────────────────────────────────────────────────────────
 
   const switchMode = (newMode) => {
     if (newMode === mode) return;
@@ -142,8 +140,6 @@ export default function Exploration() {
     setItems([]);
   };
 
-  // ── Données dérivées ─────────────────────────────────────────────────────
-
   const suggestedIds = useMemo(() => new Set(suggested.map(d => d.id)), [suggested]);
 
   const domainesList = useMemo(() => {
@@ -151,20 +147,17 @@ export default function Exploration() {
     return [...suggested, ...extra];
   }, [allDomaines, suggested, suggestedIds]);
 
-  // Familles disponibles dans les items actuels
   const availableFamilies = useMemo(() => {
     if (mode !== "formations") return [];
     const seen = new Set(items.map(getFormationFamily));
     return FORMATION_FAMILIES.filter(f => seen.has(f));
   }, [items, mode]);
 
-  // Items filtrés
   const visibleItems = useMemo(() => {
     if (mode !== "formations" || familyFilter === "Tous") return items;
     return items.filter(f => getFormationFamily(f) === familyFilter);
   }, [items, mode, familyFilter]);
 
-  // Items après recherche
   const searchedItems = useMemo(() => {
     if (!search.trim()) return visibleItems;
     const q = norm(search);
@@ -176,7 +169,6 @@ export default function Exploration() {
     });
   }, [visibleItems, search, mode]);
 
-  // Groupement par famille (formations mode uniquement)
   const groupedFormations = useMemo(() => {
     if (mode !== "formations") return [];
     const buckets = new Map();
@@ -192,22 +184,121 @@ export default function Exploration() {
 
   const activeColor = mode === "formations" ? C.formations : C.metiers;
 
+  // ── Render domaines list (partagé desktop/mobile) ─────────────────────────
+
+  const DomainesList = () => (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {domainesList.map(d => {
+        const isActive = selDomaine?.id === d.id;
+        return (
+          <div
+            key={d.id}
+            onClick={() => selectDomaine(d)}
+            className="mirai-card"
+            style={{ padding: "10px 12px", borderRadius: 14, cursor: "pointer", background: isActive ? C.domaines : T.white, border: `1.5px solid ${isActive ? C.domaines : suggestedIds.has(d.id) ? "#F9A23B55" : T.border}`, boxShadow: isActive ? `0 6px 18px ${C.domaines}30` : "none", transition: "all 0.22s" }}
+          >
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+              <span style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>{DOMAIN_ICONS[d.libelle] || "◉"}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ margin: "0 0 7px", fontSize: 12, fontWeight: 700, color: isActive ? "white" : T.text, lineHeight: 1.25, letterSpacing: "-0.01em" }}>
+                  {d.libelle}
+                </p>
+                <div onClick={e => e.stopPropagation()}>
+                  <SaveBtn type="domaine" refId={String(d.id)} label={d.libelle} parent={null} savedItems={savedItems} onSave={saveItem} onRemove={removeItem} small />
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  // ── Render contenu (formations/métiers) ───────────────────────────────────
+
+  const ContentArea = () => (
+    <>
+      <ColHeader
+        label={mode === "formations" ? "Formations post-bac" : "Métiers"}
+        count={selDomaine && !search ? items.length : selDomaine && search ? searchedItems.length : null}
+        color={activeColor}
+        active={!!selDomaine}
+      />
+
+      {selDomaine && (
+        <div style={{ position: "relative", marginBottom: 12, flexShrink: 0 }}>
+          <svg style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder={`Rechercher ${mode === "formations" ? "une formation" : "un métier"}…`}
+            style={{ width: "100%", boxSizing: "border-box", padding: "8px 32px 8px 30px", borderRadius: 10, border: `1px solid ${search ? activeColor + "60" : T.border}`, fontSize: 12, fontFamily: "'DM Sans',sans-serif", color: T.text, outline: "none", background: T.white, transition: "border-color 0.15s" }}
+          />
+          {search && (
+            <button onClick={() => setSearch("")} style={{ position: "absolute", right: 9, top: "50%", transform: "translateY(-50%)", border: "none", background: "none", cursor: "pointer", color: T.muted, fontSize: 13, lineHeight: 1, padding: 2 }}>✕</button>
+          )}
+        </div>
+      )}
+
+      {mode === "formations" && selDomaine && availableFamilies.length > 1 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 14, flexShrink: 0 }}>
+          {["Tous", ...availableFamilies].map(fam => (
+            <button key={fam} onClick={() => setFamilyFilter(fam)} style={{ padding: "4px 10px", borderRadius: 999, cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontSize: 10, fontWeight: 800, transition: "all 0.15s", border: `1px solid ${familyFilter === fam ? C.formations : T.border}`, background: familyFilter === fam ? `${C.formations}15` : T.white, color: familyFilter === fam ? C.formations : T.muted }}>
+              {fam}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div style={{ flex: 1, overflowY: "auto", paddingBottom: 32 }}>
+        {!selDomaine ? (
+          <EmptyHint icon="🗺️" title="Sélectionne un domaine" sub={`Les ${mode === "formations" ? "formations post-bac" : "métiers"} du domaine apparaîtront ici.`} />
+        ) : loading ? (
+          <Spinner />
+        ) : items.length === 0 ? (
+          <EmptyHint icon="📭" title="Aucun résultat" sub="Ce domaine ne contient pas encore de données." />
+        ) : search && searchedItems.length === 0 ? (
+          <SearchFallback query={search} mode={mode} onAskMirai={() => setPage("chatbot")} />
+        ) : mode === "formations" ? (
+          <FormationsList groups={groupedFormations} selDomaine={selDomaine} savedItems={savedItems} onSave={saveItem} onRemove={removeItem} onAskMirai={(f) => openChat({ type: "formation", refId: f.id, label: f.libelle_complet })} />
+        ) : (
+          <MetiersList metiers={searchedItems} selDomaine={selDomaine} savedItems={savedItems} onSave={saveItem} onRemove={removeItem} onAskMirai={(m) => openChat({ type: "metier", refId: m.id, label: m.nom })} />
+        )}
+      </div>
+    </>
+  );
+
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", fontFamily: "'DM Sans',sans-serif", background: "linear-gradient(180deg,#FBFCFE 0%,#F5F7FB 100%)" }}>
 
-      {/* ── Header ──────────────────────────────────────────────────────── */}
-      <div style={{ padding: "24px 32px 16px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div>
-          <h1 style={{ margin: "0 0 2px", fontSize: 24, fontWeight: 800, color: T.text, letterSpacing: "-0.04em" }}>Explorer</h1>
-          <p style={{ margin: 0, fontSize: 12, color: T.muted }}>
-            Choisis un domaine {mode === "formations" ? "et découvre les formations post-bac." : "et découvre les métiers associés."}
-          </p>
+      {/* Header */}
+      <div style={{ padding: isMobile ? "16px 16px 12px" : "24px 32px 16px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <div style={{ minWidth: 0 }}>
+          {/* Fil d'ariane mobile */}
+          {isMobile && selDomaine && (
+            <button
+              onClick={() => { setSelDomaine(null); setItems([]); setSearch(""); }}
+              style={{ background: "none", border: "none", cursor: "pointer", fontSize: 12, fontWeight: 600, color: T.orange, padding: 0, marginBottom: 4, display: "flex", alignItems: "center", gap: 4, fontFamily: "'DM Sans',sans-serif" }}
+            >
+              ← Domaines
+            </button>
+          )}
+          <h1 style={{ margin: "0 0 2px", fontSize: isMobile ? 20 : 24, fontWeight: 800, color: T.text, letterSpacing: "-0.04em" }}>
+            {isMobile && selDomaine ? selDomaine.libelle : "Explorer"}
+          </h1>
+          {(!isMobile || !selDomaine) && (
+            <p style={{ margin: 0, fontSize: 12, color: T.muted }}>
+              Choisis un domaine {mode === "formations" ? "et découvre les formations post-bac." : "et découvre les métiers associés."}
+            </p>
+          )}
         </div>
 
         {/* Toggle formations / métiers */}
-        <div style={{ display: "flex", background: T.bg, border: `1px solid ${T.border}`, borderRadius: 12, padding: 3, gap: 2 }}>
+        <div style={{ display: "flex", background: T.bg, border: `1px solid ${T.border}`, borderRadius: 12, padding: 3, gap: 2, flexShrink: 0 }}>
           {[
             { key: "formations", label: "Formations" },
             { key: "metiers",    label: "Métiers" },
@@ -215,18 +306,7 @@ export default function Exploration() {
             const active = mode === key;
             const col = key === "formations" ? C.formations : C.metiers;
             return (
-              <button
-                key={key}
-                onClick={() => switchMode(key)}
-                style={{
-                  padding: "7px 16px", borderRadius: 9, border: "none", cursor: "pointer",
-                  fontFamily: "'DM Sans',sans-serif", fontSize: 12, fontWeight: 700,
-                  background: active ? col : "transparent",
-                  color: active ? "white" : T.muted,
-                  boxShadow: active ? `0 2px 8px ${col}40` : "none",
-                  transition: "all 0.2s",
-                }}
-              >
+              <button key={key} onClick={() => switchMode(key)} style={{ padding: isMobile ? "6px 10px" : "7px 16px", borderRadius: 9, border: "none", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontSize: isMobile ? 11 : 12, fontWeight: 700, background: active ? col : "transparent", color: active ? "white" : T.muted, boxShadow: active ? `0 2px 8px ${col}40` : "none", transition: "all 0.2s" }}>
                 {label}
               </button>
             );
@@ -234,136 +314,35 @@ export default function Exploration() {
         </div>
       </div>
 
-      {/* ── 2 colonnes ──────────────────────────────────────────────────── */}
-      <div style={{ flex: 1, display: "flex", gap: 0, overflow: "hidden", padding: "0 0 0 32px" }}>
-
-        {/* ── Col 0 : Domaines ──────────────────────────────────────────── */}
-        <div style={{ width: 240, flexShrink: 0, display: "flex", flexDirection: "column", paddingRight: 16 }}>
-          <div style={{ flex: 1, overflowY: "auto", paddingBottom: 32 }}>
-            <ColHeader label="Domaines" color={C.domaines} active={true} />
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {domainesList.map(d => {
-                const isActive = selDomaine?.id === d.id;
-                return (
-                  <div
-                    key={d.id}
-                    onClick={() => selectDomaine(d)}
-                    className="mirai-card"
-                    style={{
-                      padding: "10px 12px", borderRadius: 14, cursor: "pointer",
-                      background: isActive ? C.domaines : T.white,
-                      border: `1.5px solid ${isActive ? C.domaines : suggestedIds.has(d.id) ? "#F9A23B55" : T.border}`,
-                      boxShadow: isActive ? `0 6px 18px ${C.domaines}30` : "none",
-                      transition: "all 0.22s",
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-                      <span style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>{DOMAIN_ICONS[d.libelle] || "◉"}</span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ margin: "0 0 7px", fontSize: 12, fontWeight: 700, color: isActive ? "white" : T.text, lineHeight: 1.25, letterSpacing: "-0.01em" }}>
-                          {d.libelle}
-                        </p>
-                        <div onClick={e => e.stopPropagation()}>
-                          <SaveBtn type="domaine" refId={String(d.id)} label={d.libelle} parent={null} savedItems={savedItems} onSave={saveItem} onRemove={removeItem} small />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+      {/* Layout mobile : navigation séquentielle */}
+      {isMobile ? (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", padding: "0 16px" }}>
+          {!selDomaine ? (
+            <div style={{ flex: 1, overflowY: "auto", paddingBottom: 32 }}>
+              <ColHeader label="Domaines" color={C.domaines} active={true} />
+              <DomainesList />
             </div>
-          </div>
-        </div>
-
-        {/* Séparateur */}
-        <div style={{ width: 1, background: selDomaine ? `${activeColor}30` : T.border, flexShrink: 0, transition: "background 0.4s", margin: "0 16px" }} />
-
-        {/* ── Col 1 : Formations ou Métiers ─────────────────────────────── */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", paddingRight: 32 }}>
-
-          <ColHeader
-            label={mode === "formations" ? "Formations post-bac" : "Métiers"}
-            count={selDomaine && !search ? items.length : selDomaine && search ? searchedItems.length : null}
-            color={activeColor}
-            active={!!selDomaine}
-          />
-
-          {/* Barre de recherche */}
-          {selDomaine && (
-            <div style={{ position: "relative", marginBottom: 12, flexShrink: 0 }}>
-              <svg style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-              </svg>
-              <input
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder={`Rechercher ${mode === "formations" ? "une formation" : "un métier"}…`}
-                style={{ width: "100%", boxSizing: "border-box", padding: "8px 32px 8px 30px", borderRadius: 10, border: `1px solid ${search ? activeColor + "60" : T.border}`, fontSize: 12, fontFamily: "'DM Sans',sans-serif", color: T.text, outline: "none", background: T.white, transition: "border-color 0.15s" }}
-              />
-              {search && (
-                <button
-                  onClick={() => setSearch("")}
-                  style={{ position: "absolute", right: 9, top: "50%", transform: "translateY(-50%)", border: "none", background: "none", cursor: "pointer", color: T.muted, fontSize: 13, lineHeight: 1, padding: 2 }}
-                >
-                  ✕
-                </button>
-              )}
+          ) : (
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+              <ContentArea />
             </div>
           )}
-
-          {/* Filtre par famille (formations uniquement) */}
-          {mode === "formations" && selDomaine && availableFamilies.length > 1 && (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 14, flexShrink: 0 }}>
-              {["Tous", ...availableFamilies].map(fam => (
-                <button
-                  key={fam}
-                  onClick={() => setFamilyFilter(fam)}
-                  style={{
-                    padding: "4px 10px", borderRadius: 999, cursor: "pointer", fontFamily: "'DM Sans',sans-serif",
-                    fontSize: 10, fontWeight: 800, transition: "all 0.15s",
-                    border: `1px solid ${familyFilter === fam ? C.formations : T.border}`,
-                    background: familyFilter === fam ? `${C.formations}15` : T.white,
-                    color: familyFilter === fam ? C.formations : T.muted,
-                  }}
-                >
-                  {fam}
-                </button>
-              ))}
+        </div>
+      ) : (
+        /* Layout desktop : 2 colonnes */
+        <div style={{ flex: 1, display: "flex", gap: 0, overflow: "hidden", padding: "0 0 0 32px" }}>
+          <div style={{ width: 240, flexShrink: 0, display: "flex", flexDirection: "column", paddingRight: 16 }}>
+            <div style={{ flex: 1, overflowY: "auto", paddingBottom: 32 }}>
+              <ColHeader label="Domaines" color={C.domaines} active={true} />
+              <DomainesList />
             </div>
-          )}
-
-          <div style={{ flex: 1, overflowY: "auto", paddingBottom: 32 }}>
-            {!selDomaine ? (
-              <EmptyHint icon="🗺️" title="Sélectionne un domaine" sub={`Les ${mode === "formations" ? "formations post-bac" : "métiers"} du domaine apparaîtront ici.`} />
-            ) : loading ? (
-              <Spinner />
-            ) : items.length === 0 ? (
-              <EmptyHint icon="📭" title="Aucun résultat" sub="Ce domaine ne contient pas encore de données." />
-            ) : search && searchedItems.length === 0 ? (
-              <SearchFallback query={search} mode={mode} onAskMirai={() => setPage("chatbot")} />
-            ) : mode === "formations" ? (
-              <FormationsList
-                groups={groupedFormations}
-                selDomaine={selDomaine}
-                savedItems={savedItems}
-                onSave={saveItem}
-                onRemove={removeItem}
-                onAskMirai={(f) => openChat({ type: "formation", refId: f.id, label: f.libelle_complet })}
-              />
-            ) : (
-              <MetiersList
-                metiers={searchedItems}
-                selDomaine={selDomaine}
-                savedItems={savedItems}
-                onSave={saveItem}
-                onRemove={removeItem}
-                onAskMirai={(m) => openChat({ type: "metier", refId: m.id, label: m.nom })}
-              />
-            )}
+          </div>
+          <div style={{ width: 1, background: selDomaine ? `${activeColor}30` : T.border, flexShrink: 0, transition: "background 0.4s", margin: "0 16px" }} />
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", paddingRight: 32 }}>
+            <ContentArea />
           </div>
         </div>
-
-      </div>
+      )}
     </div>
   );
 }
@@ -374,22 +353,11 @@ function SearchFallback({ query, mode, onAskMirai }) {
   return (
     <div style={{ padding: "32px 16px", textAlign: "center" }}>
       <div style={{ fontSize: 26, marginBottom: 12, opacity: 0.2 }}>🔍</div>
-      <p style={{ margin: "0 0 6px", fontSize: 13, fontWeight: 700, color: T.text }}>
-        Aucun résultat pour « {query} »
-      </p>
+      <p style={{ margin: "0 0 6px", fontSize: 13, fontWeight: 700, color: T.text }}>Aucun résultat pour « {query} »</p>
       <p style={{ margin: "0 0 18px", fontSize: 12, color: T.muted, lineHeight: 1.6, maxWidth: 220, marginInline: "auto" }}>
         Ce {mode === "formations" ? "formation" : "métier"} n'est pas dans notre base de données pour ce domaine.
       </p>
-      <button
-        onClick={onAskMirai}
-        style={{
-          display: "inline-flex", alignItems: "center", gap: 6,
-          padding: "9px 16px", borderRadius: 10, border: "none", cursor: "pointer",
-          fontFamily: "'DM Sans',sans-serif", fontSize: 12, fontWeight: 700,
-          background: grad, color: "white",
-          boxShadow: "0 4px 14px rgba(249,162,59,0.28)",
-        }}
-      >
+      <button onClick={onAskMirai} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "9px 16px", borderRadius: 10, border: "none", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontSize: 12, fontWeight: 700, background: grad, color: "white", boxShadow: "0 4px 14px rgba(249,162,59,0.28)" }}>
         ◈ Demander à MIRAI
       </button>
     </div>
@@ -409,15 +377,7 @@ function FormationsList({ groups, selDomaine, savedItems, onSave, onRemove, onAs
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
             {items.map(f => (
-              <FormationCard
-                key={f.id}
-                f={f}
-                selDomaine={selDomaine}
-                savedItems={savedItems}
-                onSave={onSave}
-                onRemove={onRemove}
-                onAskMirai={() => onAskMirai(f)}
-              />
+              <FormationCard key={f.id} f={f} selDomaine={selDomaine} savedItems={savedItems} onSave={onSave} onRemove={onRemove} onAskMirai={() => onAskMirai(f)} />
             ))}
           </div>
         </div>
@@ -428,43 +388,18 @@ function FormationsList({ groups, selDomaine, savedItems, onSave, onRemove, onAs
 
 function FormationCard({ f, selDomaine, savedItems, onSave, onRemove, onAskMirai }) {
   return (
-    <div
-      className="mirai-card"
-      style={{ padding: "12px 14px", borderRadius: 14, background: T.white, border: `1.5px solid ${T.border}`, cursor: "default" }}
-    >
-      <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 700, color: T.text, lineHeight: 1.3 }}>
-        {f.libelle_complet}
-      </p>
+    <div className="mirai-card" style={{ padding: "12px 14px", borderRadius: 14, background: T.white, border: `1.5px solid ${T.border}`, cursor: "default" }}>
+      <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 700, color: T.text, lineHeight: 1.3 }}>{f.libelle_complet}</p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 10 }}>
-        {f.type_formation?.sigle && (
-          <Pill color={C.formations} bg={`${C.formations}12`} border={`${C.formations}30`}>{f.type_formation.sigle}</Pill>
-        )}
+        {f.type_formation?.sigle && <Pill color={C.formations} bg={`${C.formations}12`} border={`${C.formations}30`}>{f.type_formation.sigle}</Pill>}
         {f.niveau_etudes && <Pill>{f.niveau_etudes}</Pill>}
         {f.duree && <Pill color={T.orange} bg={gradSoft} border="#F9A23B28">{f.duree}</Pill>}
       </div>
-      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-        <SaveBtn
-          type="formation"
-          refId={f.id}
-          label={f.libelle_complet}
-          parent={selDomaine?.libelle || null}
-          parentRefId={String(selDomaine?.id || "")}
-          savedItems={savedItems}
-          onSave={onSave}
-          onRemove={onRemove}
-          small
-        />
+      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+        <SaveBtn type="formation" refId={f.id} label={f.libelle_complet} parent={selDomaine?.libelle || null} parentRefId={String(selDomaine?.id || "")} savedItems={savedItems} onSave={onSave} onRemove={onRemove} small />
         <AskMiraiBtn onClick={onAskMirai} />
         {f.url && (
-          <a
-            href={f.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            title="Voir sur Onisep"
-            style={{ display: "inline-flex", alignItems: "center", padding: "4px 8px", borderRadius: 8, border: `1px solid ${T.border}`, background: T.bg, textDecoration: "none", fontSize: 10, fontWeight: 700, color: T.muted, transition: "border-color 0.15s" }}
-            onMouseEnter={e => e.currentTarget.style.borderColor = T.text}
-            onMouseLeave={e => e.currentTarget.style.borderColor = T.border}
-          >
+          <a href={f.url} target="_blank" rel="noopener noreferrer" title="Voir sur Onisep" style={{ display: "inline-flex", alignItems: "center", padding: "4px 8px", borderRadius: 8, border: `1px solid ${T.border}`, background: T.bg, textDecoration: "none", fontSize: 10, fontWeight: 700, color: T.muted, transition: "border-color 0.15s" }} onMouseEnter={e => e.currentTarget.style.borderColor = T.text} onMouseLeave={e => e.currentTarget.style.borderColor = T.border}>
             ↗ Onisep
           </a>
         )}
@@ -479,15 +414,7 @@ function MetiersList({ metiers, selDomaine, savedItems, onSave, onRemove, onAskM
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
       {metiers.map(m => (
-        <MetierCard
-          key={m.id}
-          m={m}
-          selDomaine={selDomaine}
-          savedItems={savedItems}
-          onSave={onSave}
-          onRemove={onRemove}
-          onAskMirai={() => onAskMirai(m)}
-        />
+        <MetierCard key={m.id} m={m} selDomaine={selDomaine} savedItems={savedItems} onSave={onSave} onRemove={onRemove} onAskMirai={() => onAskMirai(m)} />
       ))}
     </div>
   );
@@ -496,29 +423,14 @@ function MetiersList({ metiers, selDomaine, savedItems, onSave, onRemove, onAskM
 function MetierCard({ m, selDomaine, savedItems, onSave, onRemove, onAskMirai }) {
   const salaire = shortSalary(m.salaire_debutant);
   return (
-    <div
-      className="mirai-card"
-      style={{ padding: "12px 14px", borderRadius: 14, background: T.white, borderLeft: `3px solid ${C.metiers}`, borderTop: `1px solid ${T.border}`, borderRight: `1px solid ${T.border}`, borderBottom: `1px solid ${T.border}`, cursor: "default" }}
-    >
-      <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 700, color: T.text, lineHeight: 1.3 }}>
-        {m.nom}
-      </p>
+    <div className="mirai-card" style={{ padding: "12px 14px", borderRadius: 14, background: T.white, borderLeft: `3px solid ${C.metiers}`, borderTop: `1px solid ${T.border}`, borderRight: `1px solid ${T.border}`, borderBottom: `1px solid ${T.border}`, cursor: "default" }}>
+      <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 700, color: T.text, lineHeight: 1.3 }}>{m.nom}</p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 10 }}>
         {m.niveau_acces_min && <Pill color="#2EC99A" bg="#2EC99A12" border="#2EC99A28">{m.niveau_acces_min}</Pill>}
         {salaire && <Pill color={T.orange} bg={gradSoft} border="#F9A23B28">{salaire}</Pill>}
       </div>
-      <div style={{ display: "flex", gap: 6 }}>
-        <SaveBtn
-          type="metier"
-          refId={m.id}
-          label={m.nom}
-          parent={selDomaine?.libelle || null}
-          parentRefId={String(selDomaine?.id || "")}
-          savedItems={savedItems}
-          onSave={onSave}
-          onRemove={onRemove}
-          small
-        />
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <SaveBtn type="metier" refId={m.id} label={m.nom} parent={selDomaine?.libelle || null} parentRefId={String(selDomaine?.id || "")} savedItems={savedItems} onSave={onSave} onRemove={onRemove} small />
         <AskMiraiBtn onClick={onAskMirai} />
       </div>
     </div>
@@ -529,19 +441,7 @@ function MetierCard({ m, selDomaine, savedItems, onSave, onRemove, onAskMirai })
 
 function AskMiraiBtn({ onClick }) {
   return (
-    <button
-      onClick={onClick}
-      style={{
-        display: "inline-flex", alignItems: "center", gap: 5,
-        padding: "4px 10px", borderRadius: 8, border: "none", cursor: "pointer",
-        fontFamily: "'DM Sans',sans-serif", fontSize: 10, fontWeight: 700,
-        background: grad, color: "white",
-        boxShadow: "0 2px 8px rgba(249,162,59,0.3)",
-        transition: "opacity 0.15s",
-      }}
-      onMouseEnter={e => e.currentTarget.style.opacity = "0.85"}
-      onMouseLeave={e => e.currentTarget.style.opacity = "1"}
-    >
+    <button onClick={onClick} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 8, border: "none", cursor: "pointer", fontFamily: "'DM Sans',sans-serif", fontSize: 10, fontWeight: 700, background: grad, color: "white", boxShadow: "0 2px 8px rgba(249,162,59,0.3)", transition: "opacity 0.15s" }} onMouseEnter={e => e.currentTarget.style.opacity = "0.85"} onMouseLeave={e => e.currentTarget.style.opacity = "1"}>
       ◈ Demander à Mirai
     </button>
   );

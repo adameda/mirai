@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { T, grad, gradSoft } from "../constants/theme";
 import { useAppState } from "../hooks/useAppState";
+import { useMobile } from "../hooks/useMobile";
 
 const BASE = "/api/v1";
 const STORAGE_KEY = "mirai_chat_histories";
@@ -72,12 +73,14 @@ function buildProfile(answers) {
 
 export default function Chatbot() {
   const { user, answers, chatContext, setChatContext } = useAppState();
+  const isMobile = useMobile();
 
   const [histories, setHistories]       = useState(loadHistories);
   const [activeChannel, setActiveChannel] = useState("general");
   const [input, setInput]               = useState("");
   const [streaming, setStreaming]        = useState(false);
   const [streamingText, setStreamingText] = useState("");
+  const [sidebarOpen, setSidebarOpen]   = useState(false);
   const bottomRef = useRef(null);
   const abortRef  = useRef(null);
 
@@ -224,8 +227,11 @@ export default function Chatbot() {
   return (
     <div style={{ flex: 1, display: "flex", overflow: "hidden", fontFamily: "'DM Sans',sans-serif" }}>
 
-      {/* ── Sidebar ──────────────────────────────────────────────────────── */}
-      <div style={{ width: 248, flexShrink: 0, background: T.white, borderRight: `1px solid ${T.border}`, padding: "18px 13px", display: "flex", flexDirection: "column", gap: 6, overflowY: "auto" }}>
+      {/* ── Sidebar (overlay mobile) ──────────────────────────────────────── */}
+      {isMobile && sidebarOpen && (
+        <div onClick={() => setSidebarOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 998 }} />
+      )}
+      <div style={{ width: 248, flexShrink: 0, background: T.white, borderRight: `1px solid ${T.border}`, padding: "18px 13px", display: "flex", flexDirection: "column", gap: 6, overflowY: "auto", ...(isMobile ? { position: "fixed", top: 0, left: 0, height: "100vh", zIndex: 999, transform: sidebarOpen ? "translateX(0)" : "translateX(-100%)", transition: "transform 0.25s ease" } : {}) }}>
         <p style={{ margin: "0 0 11px", fontSize: 10, fontWeight: 700, color: T.muted, letterSpacing: "0.1em", textTransform: "uppercase" }}>
           Historique
         </p>
@@ -281,7 +287,10 @@ export default function Chatbot() {
       <div style={{ flex: 1, display: "flex", flexDirection: "column", background: T.bg, overflow: "hidden" }}>
 
         {/* Header */}
-        <div style={{ padding: "16px 26px", background: T.white, borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 11 }}>
+        <div style={{ padding: "14px 16px", background: T.white, borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", gap: 11 }}>
+          {isMobile && (
+            <button onClick={() => setSidebarOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", color: T.muted, fontSize: 18, padding: 0, lineHeight: 1, display: "flex", alignItems: "center", flexShrink: 0 }}>☰</button>
+          )}
           <div style={{ width: 36, height: 36, borderRadius: 10, background: grad, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: "white" }}>
             ◈
           </div>

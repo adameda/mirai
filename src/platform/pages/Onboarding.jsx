@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import Logo from "../components/Logo";
 import GradText from "../components/GradText";
 import { T, grad, gradSoft } from "../constants/theme";
+import { useMobile } from "../hooks/useMobile";
 import {
   SPECIALITES_GENERALE,
   FILIERES_TECHNO,
@@ -193,6 +194,7 @@ export default function Onboarding({ prenom, onComplete }) {
   const [step,     setStep]     = useState(0);
   const [vis,      setVis]      = useState(true);
   const [domaines, setDomaines] = useState([]);
+  const isMobile = useMobile();
 
   useEffect(() => {
     fetch("/api/v1/domaines")
@@ -231,7 +233,7 @@ export default function Onboarding({ prenom, onComplete }) {
   return (
     <div style={{ minHeight: "100vh", background: T.bg, fontFamily: "'DM Sans',sans-serif", display: "flex", flexDirection: "column" }}>
       {/* Nav + barre de progression */}
-      <nav style={{ padding: "18px 64px", display: "flex", justifyContent: "space-between", alignItems: "center", background: T.white, borderBottom: `1px solid ${T.border}` }}>
+      <nav style={{ padding: isMobile ? "14px 16px" : "18px 64px", display: "flex", justifyContent: "space-between", alignItems: "center", background: T.white, borderBottom: `1px solid ${T.border}` }}>
         <Logo size={22} />
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {steps.map((_, i) => (
@@ -252,7 +254,7 @@ export default function Onboarding({ prenom, onComplete }) {
       </nav>
 
       {/* Corps */}
-      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "40px 64px" }}>
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: isMobile ? "24px 16px" : "40px 64px" }}>
         <div style={{
           width: "100%", maxWidth: 680,
           opacity: vis ? 1 : 0,

@@ -4,9 +4,11 @@ import Logo from "../components/Logo";
 import GradText from "../components/GradText";
 import { T, grad, gradSoft } from "../constants/theme";
 import { useAppState } from "../hooks/useAppState";
+import { useMobile } from "../hooks/useMobile";
 
 export default function Auth({ mode, onComplete, onToggle, onBack }) {
   const { authError, setAuthError } = useAppState();
+  const isMobile = useMobile();
 
   const [role,       setRole]       = useState("eleve");
   const [nom,        setNom]        = useState("");
@@ -41,7 +43,7 @@ export default function Auth({ mode, onComplete, onToggle, onBack }) {
 
   return (
     <div style={{ minHeight: "100vh", background: T.bg, fontFamily: "'DM Sans',sans-serif", display: "flex", flexDirection: "column" }}>
-      <nav style={{ padding: "20px 64px", borderBottom: `1px solid ${T.border}`, background: T.white, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <nav style={{ padding: isMobile ? "16px 20px" : "20px 64px", borderBottom: `1px solid ${T.border}`, background: T.white, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <Logo size={22} />
         {onBack && (
           <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, color: T.muted, fontFamily: "'DM Sans',sans-serif", display: "flex", alignItems: "center", gap: 6 }}>
@@ -49,9 +51,9 @@ export default function Auth({ mode, onComplete, onToggle, onBack }) {
           </button>
         )}
       </nav>
-      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "48px" }}>
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: isMobile ? "20px 16px" : "48px" }}>
         <div style={{ width: "100%", maxWidth: 420 }}>
-          <div style={{ background: T.white, borderRadius: 24, padding: "40px 36px", border: `1px solid ${T.border}`, boxShadow: "0 8px 40px rgba(15,31,61,0.08)" }}>
+          <div style={{ background: T.white, borderRadius: 24, padding: isMobile ? "28px 20px" : "40px 36px", border: `1px solid ${T.border}`, boxShadow: "0 8px 40px rgba(15,31,61,0.08)" }}>
             <div style={{ textAlign: "center", marginBottom: 28 }}>
               <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}>
                 <Logo size={28} />

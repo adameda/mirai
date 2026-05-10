@@ -52,7 +52,11 @@ async function request(method, path, body, isRetry = false) {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Erreur ${res.status}`);
+    let detail = err.detail;
+    if (Array.isArray(detail)) {
+      detail = detail.map(e => e.msg?.replace(/^Value error, /, "") || e.msg).join(" · ");
+    }
+    throw new Error(detail || `Erreur ${res.status}`);
   }
   if (res.status === 204) return null;
   return res.json();

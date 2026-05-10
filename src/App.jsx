@@ -1,3 +1,4 @@
+import { useState } from "react";
 import SidebarEleve from "./platform/layout/SidebarEleve";
 import SidebarProf from "./platform/layout/SidebarProf";
 import Landing from "./platform/pages/Landing";
@@ -11,9 +12,11 @@ import Parcoursup from "./platform/pages/Parcoursup";
 import ProfDashboard from "./platform/pages/ProfDashboard";
 import ProfClasse from "./platform/pages/ProfClasse";
 import ProfJalons from "./platform/pages/ProfJalons";
+import Logo from "./platform/components/Logo";
 import { T, grad } from "./platform/constants/theme";
 import { AppProvider } from "./platform/context/AppContext";
 import { useAppState } from "./platform/hooks/useAppState";
+import { useMobile } from "./platform/hooks/useMobile";
 
 function AppShell() {
   const {
@@ -24,6 +27,9 @@ function AppShell() {
     completeAuth, completeOnboarding,
     isProf, locked, setPage,
   } = useAppState();
+
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const isMobile = useMobile();
 
   if (loading) {
     return (
@@ -78,11 +84,42 @@ function AppShell() {
   };
 
   return (
-    <div style={{ fontFamily: "'DM Sans',sans-serif", background: T.navy }}>
+    <div style={{ fontFamily: "'DM Sans',sans-serif", display: "flex", flexDirection: "column", height: "100vh", background: T.navy }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-      <div style={{ display: "flex", height: "100vh" }}>
-        {isProf ? <SidebarProf /> : <SidebarEleve />}
-        {isProf ? renderProf() : renderEleve()}
+
+      {/* Barre supérieure mobile */}
+      {isMobile && (
+        <div style={{ padding: "13px 16px", background: T.navyMid, display: "flex", alignItems: "center", gap: 12, flexShrink: 0, zIndex: 10 }}>
+          <button
+            onClick={() => setSidebarOpen(true)}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.85)", fontSize: 22, padding: 0, lineHeight: 1, display: "flex", alignItems: "center" }}
+          >
+            ☰
+          </button>
+          <Logo size={20} dark />
+        </div>
+      )}
+
+      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+        {/* Backdrop overlay mobile */}
+        {isMobile && sidebarOpen && (
+          <div
+            onClick={() => setSidebarOpen(false)}
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.52)", zIndex: 999 }}
+          />
+        )}
+
+        {/* Sidebar */}
+        {(!isMobile || sidebarOpen) && (
+          isProf
+            ? <SidebarProf mobile={isMobile} onClose={() => setSidebarOpen(false)} />
+            : <SidebarEleve mobile={isMobile} onClose={() => setSidebarOpen(false)} />
+        )}
+
+        {/* Contenu principal */}
+        <div style={{ flex: 1, overflow: "hidden", display: "flex" }}>
+          {isProf ? renderProf() : renderEleve()}
+        </div>
       </div>
     </div>
   );
