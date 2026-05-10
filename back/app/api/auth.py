@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.limiter import limiter
-from app.schemas.auth import TokenOut
+from app.schemas.auth import TokenOut, RefreshIn, RefreshOut
 from app.schemas.user import SignupIn, LoginIn
 from app.services import user_service
 
@@ -26,3 +26,10 @@ def signup(request: Request, data: SignupIn, db: Session = Depends(get_db)):
 def login(request: Request, data: LoginIn, db: Session = Depends(get_db)):
     """Se connecter avec prenom + role + class_code."""
     return user_service.login(db, data)
+
+
+@router.post("/refresh", response_model=RefreshOut)
+@limiter.limit("20/minute")
+def refresh(request: Request, data: RefreshIn, db: Session = Depends(get_db)):
+    """Renouveler l'access token à partir d'un refresh token valide."""
+    return user_service.refresh_session(db, data.refresh_token)

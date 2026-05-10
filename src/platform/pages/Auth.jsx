@@ -12,15 +12,18 @@ export default function Auth({ mode, onComplete, onToggle, onBack }) {
   const [nom,        setNom]        = useState("");
   const [prenom,     setPrenom]     = useState("");
   const [email,      setEmail]      = useState("");
-  const [password,   setPassword]   = useState("");
+  const [password,        setPassword]        = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [classCode,  setClassCode]  = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const isSignup = mode === "signup";
 
+  const passwordMismatch = isSignup && confirmPassword && password !== confirmPassword;
+
   const canSubmit = isSignup
-    ? nom && prenom && email && password && inviteCode && (role !== "eleve" || classCode)
+    ? nom && prenom && email && password && confirmPassword && !passwordMismatch && inviteCode && (role !== "eleve" || classCode)
     : email && password;
 
   async function handleSubmit() {
@@ -99,7 +102,25 @@ export default function Auth({ mode, onComplete, onToggle, onBack }) {
               )}
 
               <Input label="Adresse email" placeholder="lea@exemple.fr" value={email} onChange={(e) => setEmail(e.target.value)} />
-              <Input label="Mot de passe" placeholder="••••••••" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <Input label="Mot de passe" placeholder="••••••••" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                {isSignup && (
+                  <p style={{ margin: 0, fontSize: 11, color: T.muted }}>
+                    8 caractères min. · 1 majuscule · 1 chiffre · 1 caractère spécial
+                  </p>
+                )}
+              </div>
+
+              {isSignup && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <Input label="Confirmer le mot de passe" placeholder="••••••••" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+                  {passwordMismatch && (
+                    <p style={{ margin: 0, fontSize: 11, color: "#F4736A", fontWeight: 600 }}>
+                      Les mots de passe ne correspondent pas
+                    </p>
+                  )}
+                </div>
+              )}
 
               {isSignup && (
                 <>

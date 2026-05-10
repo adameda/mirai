@@ -1,3 +1,4 @@
+import re
 from pydantic import BaseModel, field_validator
 from typing import Optional
 
@@ -15,6 +16,19 @@ class SignupIn(BaseModel):
     @classmethod
     def email_lowercase(cls, v: str) -> str:
         return v.strip().lower()
+
+    @field_validator("password")
+    @classmethod
+    def password_complexity(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Le mot de passe doit contenir au moins 8 caractères")
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("Le mot de passe doit contenir au moins une majuscule")
+        if not re.search(r"\d", v):
+            raise ValueError("Le mot de passe doit contenir au moins un chiffre")
+        if not re.search(r"[!@#$%^&*()\-_=+\[\]{};:'\",.<>?/\\|`~]", v):
+            raise ValueError("Le mot de passe doit contenir au moins un caractère spécial")
+        return v
 
     @field_validator("role")
     @classmethod

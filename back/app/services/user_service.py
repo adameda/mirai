@@ -1,16 +1,21 @@
 import random
 import string
 
+import bleach
 from fastapi import HTTPException, status
 import bcrypt as _bcrypt
 from sqlalchemy.orm import Session
 
-from app.core.auth import create_access_token
+from app.core.auth import create_access_token, create_refresh_token, decode_refresh_token
 from app.core.config import settings
 from app.models.user import User, OnboardingAnswer
 from app.models.classe import Classe, ClasseConfig
 from app.schemas.user import SignupIn, LoginIn, UserOut, OnboardingIn, OnboardingOut
-from app.schemas.auth import TokenOut
+from app.schemas.auth import TokenOut, RefreshOut
+
+
+def _sanitize(value: str) -> str:
+    return bleach.clean(value.strip(), tags=[], strip=True)
 
 
 def _hash_password(password: str) -> str:
@@ -68,6 +73,8 @@ def signup(db: Session, data: SignupIn) -> TokenOut:
         )
 
     hashed = _hash_password(data.password)
+    nom    = _sanitize(data.nom)
+    prenom = _sanitize(data.prenom)
 
     if data.role == "eleve":
         if not data.class_code:
@@ -76,13 +83,13 @@ def signup(db: Session, data: SignupIn) -> TokenOut:
         if not classe:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Code classe introuvable")
 
-        user = User(nom=data.nom, prenom=data.prenom, email=data.email, hashed_password=hashed, role="eleve", classe_id=classe.id)
+        user = User(nom=nom, prenom=prenom, email=data.email, hashed_password=hashed, role="eleve", classe_id=classe.id)
         db.add(user)
         db.commit()
         db.refresh(user)
 
     else:  # prof
-        user = User(nom=data.nom, prenom=data.prenom, email=data.email, hashed_password=hashed, role="prof")
+        user = User(nom=nom, prenom=prenom, email=data.email, hashed_password=hashed, role="prof")
         db.add(user)
         db.flush()
 
@@ -96,8 +103,9 @@ def signup(db: Session, data: SignupIn) -> TokenOut:
         db.commit()
         db.refresh(user)
 
-    token = create_access_token(user.id)
-    return TokenOut(access_token=token, user=_build_user_out(db, user))
+    token   = create_access_token(user.id, user.role)
+    refresh = create_refresh_token(user.id, user.role)
+    return TokenOut(access_token=token, refresh_token=refresh, user=_build_user_out(db, user))
 
 
 # ── Login ──────────────────────────────────────────────────────────────────
@@ -110,8 +118,22 @@ def login(db: Session, data: LoginIn) -> TokenOut:
             detail="Email ou mot de passe incorrect",
         )
 
-    token = create_access_token(user.id)
-    return TokenOut(access_token=token, user=_build_user_out(db, user))
+    token   = create_access_token(user.id, user.role)
+    refresh = create_refresh_token(user.id, user.role)
+    return TokenOut(access_token=token, refresh_token=refresh, user=_build_user_out(db, user))
+
+
+# ── Refresh ────────────────────────────────────────────────────────────────
+
+def refresh_session(db: Session, refresh_token: str) -> RefreshOut:
+    claims = decode_refresh_token(refresh_token)
+    user = db.query(User).filter(User.id == claims["user_id"]).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Utilisateur introuvable")
+    return RefreshOut(
+        access_token=create_access_token(user.id, user.role),
+        refresh_token=create_refresh_token(user.id, user.role),
+    )
 
 
 # ── Profil ─────────────────────────────────────────────────────────────────

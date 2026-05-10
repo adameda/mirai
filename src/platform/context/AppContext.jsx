@@ -107,6 +107,7 @@ export function AppProvider({ children }) {
       } catch (_) {
         // Token invalide ou expiré
         localStorage.removeItem('mirai_token');
+        localStorage.removeItem('mirai_refresh_token');
         localStorage.removeItem('mirai_answers');
       } finally {
         setLoading(false);
@@ -123,6 +124,7 @@ export function AppProvider({ children }) {
       : await authService.login(email, password);
 
     localStorage.setItem('mirai_token', result.access_token);
+    localStorage.setItem('mirai_refresh_token', result.refresh_token);
     const me = result.user;
     setUser({ nom: me.nom, prenom: me.prenom, email: me.email, role: me.role, classCode: me.class_code });
     setOnboarded(me.onboarded);
@@ -222,6 +224,7 @@ export function AppProvider({ children }) {
   // ── Logout ─────────────────────────────────────────────────────────────
   const logout = useCallback(() => {
     localStorage.removeItem('mirai_token');
+    localStorage.removeItem('mirai_refresh_token');
     localStorage.removeItem('mirai_answers');
     const reset = getInitialState();
     setScreen(reset.screen);
