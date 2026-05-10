@@ -1,7 +1,8 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Badge from "../components/Badge";
 import GradText from "../components/GradText";
 import ProgressBar from "../components/ProgressBar";
+import GuideModal, { shouldShowGuide } from "../components/GuideModal";
 import { T, grad } from "../constants/theme";
 import { computeObjectives } from "../utils/computeObjectives";
 import { useAppState } from "../hooks/useAppState";
@@ -11,6 +12,7 @@ export default function DashboardEleve() {
   const { user, onboarded, savedItems, config, startOnboarding, setPage } = useAppState();
   const { objs, activeIdx } = useMemo(() => computeObjectives(onboarded, savedItems, config), [onboarded, savedItems, config]);
   const isMobile = useMobile();
+  const [guideOpen, setGuideOpen] = useState(() => shouldShowGuide());
   const allDone = objs.every((obj) => obj.achieved);
 
   const domaineCount = savedItems.filter((i) => i.type === "domaine").length;
@@ -19,11 +21,25 @@ export default function DashboardEleve() {
 
   return (
     <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "20px 16px" : "40px 48px", background: T.bg, fontFamily: "'DM Sans',sans-serif" }}>
-      <div style={{ marginBottom: 28 }}>
-        <p style={{ margin: "0 0 4px", fontSize: 13, color: T.muted, fontWeight: 500 }}>Tableau de bord</p>
-        <h1 style={{ margin: 0, fontSize: isMobile ? 22 : 26, fontWeight: 800, color: T.text, letterSpacing: "-0.03em" }}>
-          Bonjour, <GradText>{user.prenom}</GradText>
-        </h1>
+      <style>{`@keyframes guidePulse{0%,100%{box-shadow:0 0 0 0 rgba(249,162,59,0.55)}60%{box-shadow:0 0 0 7px rgba(249,162,59,0)}}`}</style>
+      {guideOpen && <GuideModal onClose={() => setGuideOpen(false)} />}
+
+      <div style={{ marginBottom: 28, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+        <div>
+          <p style={{ margin: "0 0 4px", fontSize: 13, color: T.muted, fontWeight: 500 }}>Tableau de bord</p>
+          <h1 style={{ margin: 0, fontSize: isMobile ? 22 : 26, fontWeight: 800, color: T.text, letterSpacing: "-0.03em" }}>
+            Bonjour, <GradText>{user.prenom}</GradText>
+          </h1>
+        </div>
+        <button
+          onClick={() => setGuideOpen(true)}
+          title="Guide de la plateforme"
+          style={{ flexShrink: 0, marginTop: 4, width: 34, height: 34, borderRadius: 10, border: `1.5px solid ${T.orange}`, background: T.white, color: T.orange, fontSize: 14, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'DM Sans',sans-serif", transition: "border-color 0.15s, color 0.15s", animation: "guidePulse 2s ease-in-out infinite" }}
+          onMouseEnter={e => { e.currentTarget.style.animation = "none"; e.currentTarget.style.background = T.orange; e.currentTarget.style.color = "white"; }}
+          onMouseLeave={e => { e.currentTarget.style.animation = "guidePulse 2s ease-in-out infinite"; e.currentTarget.style.background = T.white; e.currentTarget.style.color = T.orange; }}
+        >
+          ?
+        </button>
       </div>
 
       {allDone && (
