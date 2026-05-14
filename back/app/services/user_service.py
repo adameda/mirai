@@ -46,6 +46,24 @@ def _build_user_out(db: Session, user: User) -> UserOut:
         classe = db.query(Classe).filter(Classe.prof_id == user.id).first()
         class_code = classe.code if classe else None
 
+    answers = None
+    if user.role == "eleve" and user.onboarded:
+        oa = db.query(OnboardingAnswer).filter(OnboardingAnswer.user_id == user.id).first()
+        if oa:
+            answers = OnboardingIn(
+                niveau=oa.niveau,
+                voie=oa.voie,
+                filiere=oa.filiere,
+                specialites=oa.specialites,
+                matieres_fortes=oa.matieres_fortes,
+                matieres_aimees=oa.matieres_aimees,
+                centres_interet=oa.centres_interet,
+                style=oa.style,
+                duree=oa.duree,
+                domaines_interets=oa.domaines_interets,
+                pression_academique=oa.pression_academique,
+            )
+
     return UserOut(
         id=user.id,
         nom=user.nom,
@@ -54,6 +72,7 @@ def _build_user_out(db: Session, user: User) -> UserOut:
         role=user.role,
         class_code=class_code,
         onboarded=user.onboarded,
+        onboarding_answers=answers,
     )
 
 

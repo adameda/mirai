@@ -84,11 +84,7 @@ export function AppProvider({ children }) {
         setUser({ nom: me.nom, prenom: me.prenom, email: me.email, role: me.role, classCode: me.class_code });
         setOnboarded(me.onboarded);
 
-        // Réponses onboarding stockées localement
-        try {
-          const stored = localStorage.getItem('mirai_answers');
-          if (stored) setAnswers(JSON.parse(stored));
-        } catch (_) {}
+        if (me.onboarding_answers) setAnswers(me.onboarding_answers);
 
         if (me.role === 'eleve' && me.onboarded) {
           const favoris = await api.get('/favoris');
@@ -108,7 +104,6 @@ export function AppProvider({ children }) {
         // Token invalide ou expiré
         localStorage.removeItem('mirai_token');
         localStorage.removeItem('mirai_refresh_token');
-        localStorage.removeItem('mirai_answers');
       } finally {
         setLoading(false);
       }
@@ -128,6 +123,8 @@ export function AppProvider({ children }) {
     const me = result.user;
     setUser({ nom: me.nom, prenom: me.prenom, email: me.email, role: me.role, classCode: me.class_code });
     setOnboarded(me.onboarded);
+
+    if (me.onboarding_answers) setAnswers(me.onboarding_answers);
 
     if (me.role === 'eleve') {
       if (me.class_code) {
@@ -165,7 +162,6 @@ export function AppProvider({ children }) {
     } catch (e) {
       console.error('Onboarding API error:', e);
     }
-    localStorage.setItem('mirai_answers', JSON.stringify(newAnswers));
     setAnswers(newAnswers);
     setOnboarded(true);
     setScreen('app');
@@ -225,7 +221,6 @@ export function AppProvider({ children }) {
   const logout = useCallback(() => {
     localStorage.removeItem('mirai_token');
     localStorage.removeItem('mirai_refresh_token');
-    localStorage.removeItem('mirai_answers');
     const reset = getInitialState();
     setScreen(reset.screen);
     setAuthMode(reset.authMode);

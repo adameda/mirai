@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     GEMINI_API_KEY: str = ""
+    GEMINI_API_KEY_2: str = ""
+    GEMINI_API_KEY_3: str = ""
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:8080"
     INVITE_CODE: str = "mirai2026"
 

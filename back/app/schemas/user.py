@@ -56,6 +56,7 @@ class UserOut(BaseModel):
     role: str
     class_code: Optional[str] = None
     onboarded: bool
+    onboarding_answers: Optional["OnboardingIn"] = None
 
     model_config = {"from_attributes": True}
 

@@ -228,7 +228,7 @@ export default function Chatbot() {
           if (payload === "[DONE]") break;
           try {
             const { text: chunk, error } = JSON.parse(payload);
-            if (error) { accumulated = `Erreur : ${error}`; break; }
+            if (error) { accumulated = error; break; }
             if (chunk) { accumulated += chunk; setStreamingText(accumulated); }
           } catch { /* ligne incomplète */ }
         }

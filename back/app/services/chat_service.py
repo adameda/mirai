@@ -1,6 +1,7 @@
 """
-Service de chat — streaming Gemini 2.5 Flash via SSE.
+Service de chat — streaming Gemini 2.5 Flash via SSE avec fallback multi-clés.
 """
+import asyncio
 import json
 from typing import AsyncGenerator, Optional
 
@@ -10,7 +11,12 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.onisep import Formation, Metier
 
-genai.configure(api_key=settings.GEMINI_API_KEY)
+_key_lock = asyncio.Lock()
+
+_ERROR_OVERLOAD = (
+    "Le service est momentanément surchargé. "
+    "Patiente quelques secondes et réessaie."
+)
 
 _SYSTEM_BASE = (
     "Tu es MIRAI, un assistant bienveillant et expert en orientation post-bac française. "
@@ -135,6 +141,18 @@ def _system_prompt(
     return _SYSTEM_BASE + profile_block
 
 
+def _is_overload(exc: Exception) -> bool:
+    s = str(exc).lower()
+    return any(x in s for x in ["503", "high demand", "unavailable", "overloaded", "resource_exhausted"])
+
+
+async def _make_model(key: str, system: str) -> genai.GenerativeModel:
+    """Configure la clé et crée le modèle de façon atomique."""
+    async with _key_lock:
+        genai.configure(api_key=key)
+        return genai.GenerativeModel(model_name="gemini-2.5-flash", system_instruction=system)
+
+
 async def stream_chat(
     messages: list[dict],
     context_type: str | None,
@@ -144,22 +162,31 @@ async def stream_chat(
 ) -> AsyncGenerator[str, None]:
     system = _system_prompt(context_type, context_id, db, profile)
 
-    model = genai.GenerativeModel(
-        model_name="gemini-2.5-flash",
-        system_instruction=system,
-    )
-
     contents = [
         {"role": "user" if m["role"] == "user" else "model", "parts": [{"text": m["text"]}]}
         for m in messages
     ]
 
-    try:
-        response = await model.generate_content_async(contents, stream=True)
-        async for chunk in response:
-            if chunk.text:
-                yield f"data: {json.dumps({'text': chunk.text})}\n\n"
-    except Exception as exc:
-        yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+    keys = [k for k in [
+        settings.GEMINI_API_KEY,
+        settings.GEMINI_API_KEY_2,
+        settings.GEMINI_API_KEY_3,
+    ] if k]
 
-    yield "data: [DONE]\n\n"
+    for attempt, key in enumerate(keys):
+        is_last = attempt == len(keys) - 1
+        try:
+            model = await _make_model(key, system)
+            response = await model.generate_content_async(contents, stream=True)
+            async for chunk in response:
+                if chunk.text:
+                    yield f"data: {json.dumps({'text': chunk.text})}\n\n"
+            yield "data: [DONE]\n\n"
+            return
+        except Exception as exc:
+            if _is_overload(exc) and not is_last:
+                continue
+            error_msg = _ERROR_OVERLOAD if _is_overload(exc) else str(exc)
+            yield f"data: {json.dumps({'error': error_msg})}\n\n"
+            yield "data: [DONE]\n\n"
+            return
